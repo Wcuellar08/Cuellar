@@ -1,6 +1,6 @@
 // Service worker: guarda la app en el iPad para que abra sin internet.
 // Estrategia: primero intenta la red (para recibir actualizaciones) y si no hay, usa la copia guardada.
-const CACHE = 'ventas-v18';
+const CACHE = 'ventas-v20';
 const FILES = [
   './', './index.html', './manifest.webmanifest', './css/styles.css',
   './js/app.js', './js/store.js', './js/config.js', './js/defaults.js', './js/util.js',

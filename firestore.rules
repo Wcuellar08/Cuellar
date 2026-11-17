@@ -59,6 +59,13 @@ service cloud.firestore {
       allow delete: if isOwner();
     }
 
+    // Historial de cambios: cualquiera activo agrega (a su nombre); solo la dueña lo lee; nadie lo cambia.
+    match /logs/{id} {
+      allow create: if isActive() && request.resource.data.byUid == request.auth.uid;
+      allow read: if isOwner();
+      allow update, delete: if false;
+    }
+
     // Cortes de caja: cualquiera activo los guarda; solo la dueña los corrige o borra.
     match /cortes/{id} {
       allow read, create: if isActive();

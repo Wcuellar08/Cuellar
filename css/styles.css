@@ -532,3 +532,35 @@ h3.mt { margin-top: 18px; }
 input.invalid { border-color: var(--danger); outline: 2px solid var(--danger); outline-offset: -1px; }
 .mono { font-family: ui-monospace, Menlo, monospace; }
 .auth-field input::placeholder { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-weight: 400; letter-spacing: 0; }
+
+/* ---------- ventas: anuladas, envíos ---------- */
+.alert.bad-alert { background: var(--danger-soft); color: var(--danger); margin-bottom: 10px; }
+.ship-info { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 4px; }
+.ship-toggle { margin: 4px 0 10px; }
+.ship-box { border: 1px solid var(--line); border-radius: 12px; padding: 12px 12px 0; margin-bottom: 12px; background: var(--bg); }
+.ship-box textarea { font: inherit; font-size: 17px; width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; margin-top: 5px; resize: vertical; color: var(--ink); }
+.ship-row { align-items: flex-start; }
+.ship-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; align-items: center; }
+.ship-actions a.btn { text-decoration: none; }
+.sh-track { width: 220px; min-height: 38px; padding: 6px 10px; font-size: 15px; text-transform: uppercase; }
+#sh-tabs .chip .badge { margin-left: 4px; }
+
+/* ---------- meta del mes ---------- */
+.goal-card { display: flex; flex-direction: column; gap: 8px; cursor: pointer; }
+.goal-card.empty-goal { flex-direction: row; align-items: center; gap: 12px; cursor: default; }
+.goal-head, .goal-foot { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.goal-foot b { font-size: 1.3rem; }
+.meter { height: 14px; border-radius: 7px; background: var(--accent-soft); overflow: hidden; }
+.meter-fill { height: 100%; border-radius: 7px; background: #3d8fcc; min-width: 4px; }
+
+/* ---------- rebajas ---------- */
+.bp-preview { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin: 4px 0 8px; background: var(--bg); }
+.bp-examples { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; font-size: .92rem; }
+#print-area .label-old { font-weight: 400; font-size: .75em; }
+
+/* ---------- historial ---------- */
+.row-card { display: flex; align-items: center; gap: 16px; }
+.row-card h3 { margin-bottom: 2px; }
+.row-card p { margin: 0; }
+.log-row { align-items: flex-start; }
+.log-when { width: 90px; flex: none; font-size: .82rem; font-weight: 600; }

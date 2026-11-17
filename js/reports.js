@@ -12,6 +12,7 @@ export function computeReport(state, fromKey, toKey) {
   const to = endOfDay(toKey).getTime();
   const inRange = sales
     .filter((s) => {
+      if (s.voided) return false; // ventas anuladas no cuentan
       const t = new Date(s.date).getTime();
       return t >= from && t <= to;
     })
@@ -24,8 +25,10 @@ export function computeReport(state, fromKey, toKey) {
   const byChannel = new Map();
   const byDay = new Map();
   let returns = 0;
+  let shippingFees = 0;
 
   for (const s of inRange) {
+    shippingFees += s.shipping?.fee || 0;
     const kept = s.items.filter((li) => !li.returned);
     returns += s.items.length - kept.length;
     const total = round2(kept.reduce((a, li) => a + (li.finalPrice || 0), 0));
@@ -35,7 +38,8 @@ export function computeReport(state, fromKey, toKey) {
       date: s.date, folio: s.folio, items: kept.length, returned: s.items.length - kept.length,
       subtotal, discount: round2(subtotal - total), total, profit: round2(total - cost),
       payment: s.paymentMethod, auth: s.authCode || '', channel: s.channel, customer: s.customerName || '', phone: s.customerPhone || '',
-      seller: s.sellerName || '',
+      seller: s.sellerName || '', shippingFee: s.shipping?.fee || 0, shippingStatus: s.shipping ? s.shipping.status : '',
+      carrier: s.shipping?.carrier || '', tracking: s.shipping?.tracking || '',
     });
     if (kept.length) {
       const p = add(byPay, s.paymentMethod || '(sin dato)', () => ({ tickets: 0, items: 0, total: 0 }));
@@ -103,7 +107,7 @@ export function computeReport(state, fromKey, toKey) {
     kpis: {
       revenue, cost, profit: round2(revenue - cost), margin: revenue ? (revenue - cost) / revenue : 0,
       items: lines.length, tickets: ticketCount, avgTicket: ticketCount ? round2(revenue / ticketCount) : 0,
-      discounts, returns,
+      discounts, returns, shippingFees: round2(shippingFees),
       invCount: inventory.length,
       invValue: round2(inventory.reduce((a, i) => a + (i.price || 0), 0)),
       invCost: round2(inventory.reduce((a, i) => a + (i.cost || 0), 0)),

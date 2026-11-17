@@ -20,6 +20,12 @@ function mergeSettings(s) {
   return { ...structuredClone(DEFAULT_SETTINGS), ...(s || {}) };
 }
 
+const BACK_TO_STOCK = { status: 'disponible', soldAt: null, saleId: null, soldPrice: null, pendingUnpublish: [] };
+
+function logEntry(state, action, text, ref = '') {
+  return { at: new Date().toISOString(), by: state.user?.name || '', byUid: state.user?.uid || '', action, text, ref };
+}
+
 function makeCode(prefix, n) {
   return `${(prefix || 'GEN').toUpperCase()}-${pad(n)}`;
 }
@@ -74,7 +80,7 @@ function baseStore() {
   const listeners = new Set();
   const authListeners = new Set();
   const store = {
-    state: { settings: mergeSettings(), items: [], sales: [], users: [], cortes: [], user: null, ready: false },
+    state: { settings: mergeSettings(), items: [], sales: [], users: [], cortes: [], logs: [], user: null, ready: false },
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     onAuth(fn) { authListeners.add(fn); return () => authListeners.delete(fn); },
     emit() { listeners.forEach((f) => f(store.state)); },
@@ -101,6 +107,7 @@ function createLocalStore() {
   if (!db) db = { settings: mergeSettings(), items: [], sales: [], counter: 1 };
   db.users ||= [];
   db.cortes ||= [];
+  db.logs ||= [];
   delete db.user; // versión anterior
 
   const save = () => {
@@ -119,6 +126,7 @@ function createLocalStore() {
     store.state.sales = db.sales;
     store.state.users = db.users.map(publicUser);
     store.state.cortes = db.cortes;
+    store.state.logs = store.isOwner() ? db.logs : [];
     store.state.ready = true;
     store.emit();
   };
@@ -247,6 +255,35 @@ function createLocalStore() {
       db.cortes.push({ ...corte, id: 'c' + Date.now().toString(36) });
       save();
     },
+    async updateItems(changes) {
+      changes.forEach(([id, patch]) => { const it = db.items.find((i) => i.id === id); if (it) Object.assign(it, patch); });
+      save();
+    },
+    async updateSale(id, patch) {
+      ownerOnly();
+      Object.assign(db.sales.find((x) => x.id === id), patch);
+      save();
+    },
+    async updateShipping(id, shipping) {
+      db.sales.find((x) => x.id === id).shipping = shipping;
+      save();
+    },
+    async voidSale(id, reason) {
+      ownerOnly();
+      const s = db.sales.find((x) => x.id === id);
+      if (!s || s.voided) return;
+      Object.assign(s, { voided: true, voidedAt: new Date().toISOString(), voidedBy: store.state.user?.name || '', voidReason: reason || '' });
+      s.items.filter((li) => !li.returned).forEach((li) => {
+        const it = db.items.find((i) => i.id === li.itemId);
+        if (it && it.saleId === s.id) Object.assign(it, BACK_TO_STOCK);
+      });
+      save();
+    },
+    async log(action, text, ref) {
+      db.logs.unshift({ ...logEntry(store.state, action, text, ref), id: 'l' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5) });
+      if (db.logs.length > 2000) db.logs.length = 2000;
+      save();
+    },
     async pauseSync() {},
     async resumeSync() {},
     async exportData({ withPhotos = false } = {}) {
@@ -355,6 +392,12 @@ async function createFirebaseStore() {
       store.state.sales = snap.docs.map((d) => ({ ...d.data(), id: d.id }));
       markReady('sales');
     }, (e) => console.error(e)));
+    if (store.isOwner()) {
+      unsubs.push(F.onSnapshot(F.query(F.collection(db, 'logs'), F.orderBy('at', 'desc'), F.limit(500)), (snap) => {
+        store.state.logs = snap.docs.map((d) => ({ ...d.data(), id: d.id }));
+        store.emit();
+      }, (e) => console.error(e)));
+    }
     unsubs.push(F.onSnapshot(F.collection(db, 'cortes'), (snap) => {
       store.state.cortes = snap.docs.map((d) => ({ ...d.data(), id: d.id }));
       store.emit();
@@ -445,6 +488,7 @@ async function createFirebaseStore() {
       }
     },
     async logout() {
+      stopListeners(); // antes de salir, para que Firebase no rechace lecturas pendientes
       await A.signOut(auth);
     },
     async setUserName(name) {
@@ -578,6 +622,34 @@ async function createFirebaseStore() {
     },
     async saveCorte(corte) {
       fire(F.addDoc(F.collection(db, 'cortes'), corte));
+    },
+    async updateItems(changes) {
+      for (let i = 0; i < changes.length; i += 400) {
+        const b = F.writeBatch(db);
+        changes.slice(i, i + 400).forEach(([id, patch]) => b.update(F.doc(db, 'items', id), patch));
+        fire(b.commit());
+      }
+    },
+    async updateSale(id, patch) {
+      ownerOnly();
+      fire(F.updateDoc(F.doc(db, 'sales', id), patch));
+    },
+    async updateShipping(id, shipping) {
+      fire(F.updateDoc(F.doc(db, 'sales', id), { shipping }));
+    },
+    async voidSale(id, reason) {
+      ownerOnly();
+      const s = store.state.sales.find((x) => x.id === id);
+      if (!s || s.voided) return;
+      const b = F.writeBatch(db);
+      b.update(F.doc(db, 'sales', id), { voided: true, voidedAt: new Date().toISOString(), voidedBy: store.state.user?.name || '', voidReason: reason || '' });
+      s.items.filter((li) => !li.returned).forEach((li) => {
+        if (store.getItem(li.itemId)?.saleId === id) b.update(F.doc(db, 'items', li.itemId), BACK_TO_STOCK);
+      });
+      fire(b.commit());
+    },
+    async log(action, text, ref) {
+      fire(F.addDoc(F.collection(db, 'logs'), logEntry(store.state, action, text, ref)));
     },
     // El iPad no abre la ventana de imprimir mientras haya una conexión abierta
     // (Firestore mantiene una siempre abierta). Se pausa durante la vista de impresión.

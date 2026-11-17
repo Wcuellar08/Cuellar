@@ -25,6 +25,16 @@ App para iPad, que se abre en Safari, para llevar el inventario, registrar venta
   - Por canal
   - Inventario
   - Cortes de caja
+- **Corregir y anular ventas** (solo la dueña): desde el ticket se corrige la forma de pago, la autorización, el canal,
+  la clienta o los precios. También se puede anular la venta completa con un motivo: deja de contar en reportes
+  y en el corte, y las prendas vuelven al inventario.
+- **Envíos**: al cobrar se marca "Es un envío" (dirección, paquetería, costo de envío). En Ventas › Envíos
+  pasan de *por empacar* → *enviado* (con número de guía y botón de WhatsApp para la clienta) → *entregado*.
+- **Rebajas en grupo** (solo la dueña): un % o precio fijo a una categoría, subcategoría o prendas con X días.
+  Guarda el precio anterior para poder quitar la rebaja, y deja las etiquetas pendientes de reimprimir.
+- **Meta del mes** (solo la dueña): en el Inicio, cuánto llevas, cuánto falta y cuánto vender por día.
+- **Historial de cambios** (solo la dueña, en Ajustes): quién cambió precios, borró prendas, hizo devoluciones,
+  corrigió o anuló ventas, marcó envíos, etc. Nadie lo puede borrar.
 - **Corte de caja** (en Ventas): por día y por vendedor muestra lo cobrado y lo devuelto por cada forma de pago.
   Con el fondo inicial calcula cuánto efectivo debe haber y dice si sobra o falta. Los cortes se guardan.
 - **Respaldo** (en Ajustes, solo la dueña): descarga un archivo con todo, que se puede guardar en iCloud Drive.

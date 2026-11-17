@@ -27,7 +27,7 @@ export function labelHtml(item, title, storeName) {
       <div class="label-code">${esc(item.code)}</div>
       <div class="label-desc">${esc(title)}</div>
       ${item.size ? `<div class="label-size">Talla ${esc(item.size)}</div>` : ''}
-      <div class="label-price">${money(item.price)}</div>
+      <div class="label-price">${item.originalPrice ? `<s class="label-old">${money(item.originalPrice)}</s> ` : ''}${money(item.price)}</div>
     </div>
   </div>`;
 }

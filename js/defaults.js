@@ -24,6 +24,8 @@ export const DEFAULT_SETTINGS = {
   // Dónde se publican las prendas (para recordar marcarlas como vendidas)
   platforms: ['Instagram', 'Vitrinnea'],
   channels: ['Tienda', 'Bazar', 'Facebook', 'Instagram', 'WhatsApp'],
+  carriers: ['Guatex', 'Cargo Expreso', 'Forza Delivery', 'Mensajero propio', 'Entrega en persona'],
+  monthlyGoal: 0,
 };
 
 export const CONDITIONS = ['Nueva con etiqueta', 'Como nueva', 'Buen estado', 'Con detalle'];

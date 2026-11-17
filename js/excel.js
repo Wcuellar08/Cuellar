@@ -49,6 +49,7 @@ export function exportReport(report, storeName) {
     ['Prendas vendidas', k.items],
     ['Ticket promedio', k.avgTicket],
     ['Devoluciones', k.returns],
+    ['Envíos cobrados (aparte de las ventas)', k.shippingFees || 0],
     [],
     ['INVENTARIO ACTUAL', ''],
     ['Prendas disponibles', k.invCount],
@@ -56,7 +57,7 @@ export function exportReport(report, storeName) {
     ['Costo del inventario', k.invCost],
   ];
   const wsR = XLSX.utils.aoa_to_sheet(resumen);
-  ['B6', 'B7', 'B8', 'B10', 'B13', 'B18', 'B19'].forEach((a) => wsR[a] && (wsR[a].z = MONEY_FMT));
+  ['B6', 'B7', 'B8', 'B10', 'B13', 'B15', 'B19', 'B20'].forEach((a) => wsR[a] && (wsR[a].z = MONEY_FMT));
   if (wsR.B9) wsR.B9.z = PCT_FMT;
   wsR['!cols'] = [{ wch: 26 }, { wch: 34 }];
   XLSX.utils.book_append_sheet(wb, wsR, 'Resumen');
@@ -74,7 +75,9 @@ export function exportReport(report, storeName) {
     Fecha: d(t.date), Hora: time(t.date), Ticket: t.folio, Prendas: t.items, Devueltas: t.returned,
     Subtotal: t.subtotal, Descuento: t.discount, Total: t.total, Ganancia: t.profit,
     'Forma de pago': t.payment, 'Autorización': t.auth, Canal: t.channel, Cliente: t.customer, 'Teléfono': t.phone, Vendedor: t.seller,
-  })), { money: ['Subtotal', 'Descuento', 'Total', 'Ganancia'], widths: [12, 8, 16] }), 'Tickets');
+    'Envío cobrado': t.shippingFee, 'Paquetería': t.carrier, 'Guía': t.tracking,
+    'Estado envío': { por_empacar: 'Por empacar', enviado: 'Enviado', entregado: 'Entregado' }[t.shippingStatus] || '',
+  })), { money: ['Subtotal', 'Descuento', 'Total', 'Ganancia', 'Envío cobrado'], widths: [12, 8, 16] }), 'Tickets');
 
   // --- Por día ---
   XLSX.utils.book_append_sheet(wb, sheet(report.byDay.map((x) => ({

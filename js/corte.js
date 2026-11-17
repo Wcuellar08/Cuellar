@@ -19,11 +19,13 @@ export function computeCorte(state, day, sellerUid = '', sellerName = '') {
   settings.paymentMethods.forEach((m) => row(m));
 
   for (const s of sales) {
+    if (s.voided) continue; // una venta anulada nunca entró a caja
     if (dayKey(s.date) === day && (!sellerUid || s.sellerUid === sellerUid)) {
       const r = row(s.paymentMethod);
       r.tickets++;
       r.items += s.items.length;
-      r.sales += s.items.reduce((a, li) => a + (li.finalPrice || 0), 0);
+      // Lo cobrado: prendas + envío cobrado a la clienta
+      r.sales += s.items.reduce((a, li) => a + (li.finalPrice || 0), 0) + (s.shipping?.fee || 0);
     }
     for (const li of s.items) {
       if (!li.returned || !li.returnedAt || dayKey(li.returnedAt) !== day) continue;
