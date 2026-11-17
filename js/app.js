@@ -17,7 +17,7 @@ const lsGet = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d;
 const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* sin almacenamiento */ } };
 
 const ui = {
-  tab: lsGet('ui.tab', 'vender'),
+  tab: 'inicio',
   cart: [], // {itemId, finalPrice}
   discount: 0,
   payment: null,
@@ -34,6 +34,7 @@ const ui = {
 
 // ------------------------------------------------------------------ iconos
 const ICONS = {
+  home: '<path d="M3 11 12 4l9 7"/><path d="M5 10v10h5v-6h4v6h5V10"/>',
   sell: '<path d="M3 3h2l2.4 12.2a2 2 0 0 0 2 1.8h7.7a2 2 0 0 0 2-1.6L21 8H6"/><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/>',
   box: '<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>',
   receipt: '<path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z"/><path d="M9 8h6M9 12h6"/>',
@@ -48,6 +49,7 @@ const ICONS = {
 const icon = (n, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[n]}</svg>`;
 
 const TABS = [
+  ['inicio', 'Inicio', 'home'],
   ['vender', 'Vender', 'sell'],
   ['inventario', 'Inventario', 'box'],
   ['ventas', 'Ventas', 'receipt'],
@@ -89,14 +91,17 @@ async function main() {
   await store.init();
 }
 
+let lastUid = null;
 function renderApp() {
   const user = S().user;
   const app = $('#app');
   if (!user) return renderLogin(app);
-  if (!visibleTabs().some((t) => t[0] === ui.tab)) ui.tab = 'vender';
+  // Al entrar (o cambiar de usuario) se abre el Inicio
+  if (user.uid !== lastUid) { ui.tab = 'inicio'; lastUid = user.uid; }
+  if (!visibleTabs().some((t) => t[0] === ui.tab)) ui.tab = 'inicio';
   app.innerHTML = `
     <header class="topbar">
-      <div class="brand">${icon('tag')}<span id="store-name">${esc(S().settings.storeName)}</span>
+      <div class="brand" id="brand" role="button" tabindex="0" title="Inicio">${icon('tag')}<span id="store-name">${esc(S().settings.storeName)}</span>
         ${isDemo ? '<span class="badge warn">Modo demo</span>' : ''}</div>
       <div class="top-right"><span id="net" class="net"></span><span class="who">${esc(user.name || user.username || '')}${isOwner() ? '' : ' · Ayudante'}</span></div>
     </header>
@@ -105,6 +110,7 @@ function renderApp() {
       `<button data-tab="${id}" class="${ui.tab === id ? 'active' : ''}">${icon(ic)}<span>${label}</span></button>`).join('')}
     </nav>`;
   $$('.tabbar button').forEach((b) => b.addEventListener('click', () => switchTab(b.dataset.tab)));
+  $('#brand').addEventListener('click', () => switchTab('inicio'));
   updateNetBadge();
   mountView();
   if (!user.name && isOwner()) askName();
@@ -220,6 +226,152 @@ function askName() {
   };
   m.querySelector('#nm-ok').addEventListener('click', ok);
   m.querySelector('#nm').addEventListener('keydown', (e) => e.key === 'Enter' && ok());
+}
+
+// =================================================================== INICIO (Home)
+function salesSum(sales) {
+  let total = 0, items = 0;
+  sales.forEach((s) => s.items.forEach((li) => { if (!li.returned) { total += li.finalPrice || 0; items++; } }));
+  return { total: round2(total), items, tickets: sales.filter((s) => s.items.some((li) => !li.returned)).length };
+}
+const inDay = (iso, from, to) => { const k = dayKey(iso); return k >= from && k <= to; };
+
+function homeAlerts() {
+  const me = S().user;
+  const owner = isOwner();
+  const alerts = [];
+  const pending = S().items.filter((i) => i.status === 'disponible' && !i.labelPrinted).length;
+  if (pending) alerts.push({ act: 'labels', tone: 'warn', text: `${pending} prenda${pending === 1 ? '' : 's'} sin etiqueta impresa`, cta: 'Imprimir' });
+  const y = new Date(); y.setDate(y.getDate() - 1);
+  const yk = dayKey(y);
+  const ySales = S().sales.filter((s) => dayKey(s.date) === yk && (owner || s.sellerUid === me.uid));
+  const yCorte = S().cortes.some((k) => k.day === yk && (owner || k.createdByUid === me.uid));
+  if (ySales.length && !yCorte) alerts.push({ act: 'corte-ayer', tone: 'warn', text: 'No se hizo el corte de caja de ayer', cta: 'Hacer corte' });
+  if (owner) {
+    const d = daysSinceBackup();
+    if (S().items.length && (d === null || d > 7)) {
+      alerts.push({ act: 'backup', tone: 'warn', text: d === null ? 'Todavía no has hecho un respaldo' : `Hace ${d} días que no haces un respaldo`, cta: 'Respaldar' });
+    }
+    const old = S().items.filter((i) => i.status === 'disponible' && Date.now() - new Date(i.createdAt).getTime() > 60 * 86400000).length;
+    if (old) alerts.push({ act: 'old', tone: 'info', text: `${old} prenda${old === 1 ? '' : 's'} con más de 60 días sin venderse`, cta: 'Ver' });
+  }
+  return alerts;
+}
+
+VIEWS.inicio = {
+  mount(v) {
+    v.innerHTML = '<div id="home"></div>';
+    $('#home').addEventListener('click', (e) => this.onClick(e));
+  },
+  onClick(e) {
+    const a = e.target.closest('[data-act]');
+    if (!a) {
+      const s = e.target.closest('[data-sale]');
+      if (s) openSaleDetail(s.dataset.sale);
+      return;
+    }
+    const act = a.dataset.act;
+    if (act === 'vender') switchTab('vender');
+    else if (act === 'nueva') { switchTab('inventario'); openItemForm(); }
+    else if (act === 'labels') openLabelsModal();
+    else if (act === 'corte') openCorte();
+    else if (act === 'corte-ayer') { const y = new Date(); y.setDate(y.getDate() - 1); openCorte(dayKey(y)); }
+    else if (act === 'backup') switchTab('ajustes');
+    else if (act === 'old') { ui.rep.preset = 'mes'; switchTab('reportes'); setTimeout(() => $$('#r-body h3').find((h) => h.textContent.startsWith('Más tiempo'))?.scrollIntoView({ block: 'start' }), 100); }
+    else if (act === 'ventas') switchTab('ventas');
+  },
+  refresh() {
+    const el = $('#home');
+    if (!el) return;
+    const me = S().user;
+    const owner = isOwner();
+    const now = new Date();
+    const today = dayKey(now);
+    const hour = now.getHours();
+    const hello = hour < 12 ? 'Buenos días' : hour < 19 ? 'Buenas tardes' : 'Buenas noches';
+    const mine = (s) => owner || s.sellerUid === me.uid;
+    const sales = S().sales.filter(mine);
+
+    // --- números
+    let kpis;
+    if (owner) {
+      const monthFrom = dayKey(new Date(now.getFullYear(), now.getMonth(), 1));
+      const lastFrom = dayKey(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+      const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+      const lastTo = dayKey(new Date(now.getFullYear(), now.getMonth() - 1, Math.min(now.getDate(), lastMonthEnd.getDate())));
+      const d = computeReport(S(), today, today).kpis;
+      const m = computeReport(S(), monthFrom, today).kpis;
+      const l = computeReport(S(), lastFrom, lastTo).kpis;
+      const change = l.revenue ? Math.round(((m.revenue - l.revenue) / l.revenue) * 100) : null;
+      const monthName = now.toLocaleDateString('es-GT', { month: 'long' });
+      kpis = `
+        ${homeKpi('Ventas de hoy', money(d.revenue), `${d.items} prenda${d.items === 1 ? '' : 's'} · ${d.tickets} ticket${d.tickets === 1 ? '' : 's'}`)}
+        ${homeKpi('Ganancia de hoy', money(d.profit), d.revenue ? `Margen ${Math.round(d.margin * 100)}%` : '—')}
+        ${homeKpi(`Ventas de ${monthName}`, money(m.revenue),
+          change === null ? `${m.items} prendas` : `<span class="${change >= 0 ? 'up' : 'down'}">${change >= 0 ? '▲' : '▼'} ${Math.abs(change)}%</span> vs. mismo periodo del mes pasado`)}
+        ${homeKpi(`Ganancia de ${monthName}`, money(m.profit), `${m.items} prendas · ${m.tickets} tickets`)}`;
+    } else {
+      const d = salesSum(sales.filter((s) => inDay(s.date, today, today)));
+      const w0 = new Date(now); w0.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+      const w = salesSum(sales.filter((s) => inDay(s.date, dayKey(w0), today)));
+      kpis = `
+        ${homeKpi('Mis ventas de hoy', money(d.total), `${d.items} prenda${d.items === 1 ? '' : 's'} · ${d.tickets} ticket${d.tickets === 1 ? '' : 's'}`)}
+        ${homeKpi('Mis ventas de la semana', money(w.total), `${w.items} prendas · ${w.tickets} tickets`)}`;
+    }
+
+    // --- avisos
+    const alerts = homeAlerts();
+    const alertsHtml = alerts.length
+      ? alerts.map((a) => `<div class="alert ${a.tone}"><span class="grow">${esc(a.text)}</span><button class="btn small" data-act="${a.act}">${esc(a.cta)}</button></div>`).join('')
+      : '<div class="alert ok"><span class="grow">✓ Todo al día</span></div>';
+
+    // --- últimas ventas
+    const recent = sales.slice().sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+    const recentHtml = recent.length ? recent.map((s) => {
+      const n = saleNet(s);
+      return `<div class="row-item tap" data-sale="${esc(s.id)}">
+        <div class="time">${dayKey(s.date) === today ? new Date(s.date).toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' }) : fmtDate(s.date).slice(0, 6)}</div>
+        <div class="grow"><div>${n.count} prenda${n.count === 1 ? '' : 's'}${s.customerName ? ' · ' + esc(s.customerName) : ''}</div>
+          <small class="muted">${esc(s.paymentMethod)} · ${esc(s.channel)}${owner ? ' · ' + esc(s.sellerName || '') : ''}</small></div>
+        <div class="price">${money(n.total)}</div></div>`;
+    }).join('') : '<p class="empty">Todavía no hay ventas.</p>';
+
+    // --- lo más vendido de la semana (dueña)
+    let topHtml = '';
+    if (owner) {
+      const w0 = new Date(now); w0.setDate(now.getDate() - 6);
+      const r = computeReport(S(), dayKey(w0), today);
+      topHtml = hbarChart('Lo más vendido (últimos 7 días)', 'Prendas vendidas por subcategoría',
+        groupCount(r.lines, 'sub', (l) => [l.category, l.subcategory], (l) => l.finalPrice).slice(0, 5),
+        'vendidas', 'en ventas', 'Sin ventas en los últimos 7 días.');
+    }
+
+    el.innerHTML = `
+      <div class="home-hello">
+        <h1>${hello}, ${esc((me.name || '').split(' ')[0])}</h1>
+        <p class="muted">${(() => { const t = now.toLocaleDateString('es-GT', { weekday: 'long', day: 'numeric', month: 'long' }); return t.charAt(0).toUpperCase() + t.slice(1); })()}</p>
+      </div>
+      <div class="home-kpis ${owner ? '' : 'two'}">${kpis}</div>
+      <div class="quick">
+        <button class="quick-btn primary" data-act="vender">${icon('sell')}<span>Vender</span></button>
+        <button class="quick-btn" data-act="nueva">${icon('plus')}<span>Nueva prenda</span></button>
+        <button class="quick-btn" data-act="labels">${icon('tag')}<span>Etiquetas</span></button>
+        <button class="quick-btn" data-act="corte">${icon('receipt')}<span>Corte de caja</span></button>
+      </div>
+      <div class="home-grid">
+        <section class="card"><h3>Avisos</h3><div class="alerts">${alertsHtml}</div></section>
+        <section class="card">
+          <div class="card-head"><h3>${owner ? 'Últimas ventas' : 'Mis últimas ventas'}</h3><button class="btn small ghost" data-act="ventas">Ver todas</button></div>
+          <div class="list">${recentHtml}</div>
+        </section>
+      </div>
+      ${topHtml}`;
+    if (owner) bindChartTips(el);
+  },
+};
+
+function homeKpi(label, value, sub) {
+  return `<div class="kpi"><div class="kpi-label">${label}</div><div class="kpi-val">${value}</div><div class="kpi-sub">${sub}</div></div>`;
 }
 
 // =================================================================== VENDER
@@ -756,10 +908,10 @@ function openSaleDetail(id) {
 }
 
 // =================================================================== CORTE DE CAJA
-function openCorte() {
+function openCorte(initialDay = null) {
   const me = S().user;
   const owner = isOwner();
-  const st = { day: dayKey(new Date()), seller: owner ? '' : me.uid, fondo: 0, contado: null, notes: '' };
+  const st = { day: initialDay || dayKey(new Date()), seller: owner ? '' : me.uid, fondo: 0, contado: null, notes: '' };
   const sellerName = (uidv) => (uidv ? S().users.find((u) => u.uid === uidv)?.name || me.name : 'Todos');
 
   const m = openModal(`

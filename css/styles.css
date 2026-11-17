@@ -416,3 +416,37 @@ body.printing #print-area.fmt-carta {
 .diff.bad { background: var(--danger-soft); color: var(--danger); }
 .badge.bad { background: var(--danger-soft); color: var(--danger); }
 h3.mt { margin-top: 18px; }
+
+/* ---------- inicio ---------- */
+.brand { cursor: pointer; border-radius: 10px; padding: 4px 6px; margin: -4px -6px; }
+.brand:active { background: var(--accent-soft); }
+.home-hello h1 { font-size: 1.6rem; margin: 4px 0 2px; }
+.home-hello p { margin: 0 0 16px; }
+.home-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+.home-kpis.two { grid-template-columns: repeat(2, 1fr); }
+.kpi-sub .up { color: var(--ok); font-weight: 700; }
+.kpi-sub .down { color: var(--danger); font-weight: 700; }
+.quick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+.quick-btn {
+  font: inherit; font-weight: 700; font-size: 16px; color: var(--ink); cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  min-height: 96px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--card);
+}
+.quick-btn .ic { width: 30px; height: 30px; color: var(--accent-ink); }
+.quick-btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.quick-btn.primary .ic { color: var(--on-accent); }
+.quick-btn:active { transform: scale(.98); }
+.home-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; align-items: start; }
+.alerts { display: flex; flex-direction: column; gap: 8px; }
+.alert { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; font-weight: 600; min-height: 52px; }
+.alert.warn { background: var(--warn-soft); color: var(--warn); }
+.alert.info { background: var(--accent-soft); color: var(--accent-ink); }
+.alert.ok { background: var(--ok-soft); color: var(--ok); }
+.alert .btn { color: var(--ink); }
+@media (max-width: 900px) {
+  .home-kpis { grid-template-columns: 1fr 1fr; }
+  .home-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .quick { grid-template-columns: 1fr 1fr; }
+}
