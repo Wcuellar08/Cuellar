@@ -213,8 +213,12 @@ async function renderLogin(app) {
   app.innerHTML = `
     <div class="login">
       <div class="login-card">
-        <div class="login-logo">${icon('tag')}</div>
-        <h1>Bienvenido a BOOHO</h1>
+        <div class="login-brand">
+          <div class="wordmark">BOOHO</div>
+          <div class="rule"></div>
+          <h1>Bienvenido a BOOHO</h1>
+          <p>Registro de ventas</p>
+        </div>
         ${isDemo ? '<p class="muted small">Estás en <b>modo demo</b>: los datos se guardan solo en este dispositivo.</p>' : ''}
         ${setup ? `
           <p class="muted">Primera vez: crea tu usuario de <b>dueña</b>. Después, desde <b>Ajustes › Usuarios</b>, creas a las demás personas.</p>
@@ -1811,7 +1815,11 @@ function groupCount(rows, group, keyFn, amountFn) {
 
 // Colores de categoría (paleta validada para daltonismo). Cada categoría tiene siempre el
 // mismo color, según su lugar en Ajustes; sus subcategorías usan el color de la categoría.
-const CAT_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948'];
+// Paleta validada; en modo oscuro se usan los mismos tonos ajustados para fondo oscuro
+const isDark = () => window.matchMedia?.('(prefers-color-scheme: dark)').matches;
+const CAT_LIGHT = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948'];
+const CAT_DARK = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#0ca30c', '#9085e9', '#e66767'];
+const CAT_COLORS = new Proxy([], { get: (_, k) => (isDark() ? CAT_DARK : CAT_LIGHT)[k] });
 let catColorMap = null;
 /**
  * Reparte los colores entre las categorías que aparecen en los gráficos de la pantalla
@@ -1860,8 +1868,8 @@ function hbarChart(title, subtitle, data, countWord, amountWord, emptyMsg) {
 
 
 // Gráfico de dona (paleta categórica validada; "Otras" en gris)
-const DONUT_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4'];
-const DONUT_OTHER = '#a7b4c0';
+const DONUT_COLORS = new Proxy([], { get: (_, k) => (isDark() ? CAT_DARK : CAT_LIGHT)[k] });
+const DONUT_OTHER = 'var(--other)';
 
 function donutChart(title, subtitle, data, countWord, amountWord, emptyMsg) {
   const MAX = 5;
@@ -1890,7 +1898,7 @@ function donutChart(title, subtitle, data, countWord, amountWord, emptyMsg) {
       d = `M${x1} ${y1}A${R} ${R} 0 ${big} 1 ${x2} ${y2}L${x3} ${y3}A${r} ${r} 0 ${big} 0 ${x4} ${y4}Z`;
     }
     a0 = a1;
-    return `<path class="donut-slice" data-k="${i}" d="${d}" fill="${x.color}" data-tip="${esc(tipOf(x))}" fill-rule="evenodd"></path>`;
+    return `<path class="donut-slice" data-k="${i}" d="${d}" style="fill:${x.color}" data-tip="${esc(tipOf(x))}" fill-rule="evenodd"></path>`;
   }).join('');
   const legend = rows.map((x, i) => `
     <div class="donut-leg hbar-row" data-k="${i}" tabindex="0" data-tip="${esc(tipOf(x))}" aria-label="${esc(x.name)}: ${x.count} ${countWord}">
@@ -2066,7 +2074,7 @@ VIEWS.ajustes = {
         ${isOwner() ? '' : '<p class="muted small">Para cambiar tu contraseña o tu nombre, pídeselo a la dueña.</p>'}
       </section>`;
     if (!isOwner()) {
-      v.innerHTML = myCard + '<p class="muted small center">BOOHO · Registro de Ventas · v1.7</p>';
+      v.innerHTML = myCard + '<p class="muted small center">BOOHO · Registro de Ventas · v1.8</p>';
       $('#a-logout').addEventListener('click', async () => { if (await confirmDialog('¿Cerrar sesión?')) store.logout(); });
       return;
     }
@@ -2124,7 +2132,7 @@ VIEWS.ajustes = {
       ${isDemo ? `<section class="card"><h3>Modo demo</h3>
         <p class="muted small">Los datos se guardan solo en este dispositivo. Cuando configures Firebase, la app usará la nube y estos datos de prueba no se pasan.</p>
         <button class="btn danger ghost" id="a-reset">Borrar todos los datos de prueba</button></section>` : ''}
-      <p class="muted small center">BOOHO · Registro de Ventas · v1.7</p>`;
+      <p class="muted small center">BOOHO · Registro de Ventas · v1.8</p>`;
     this.drawCats();
     this.drawList('#a-pay', 'paymentMethods', 'Nueva forma de pago');
     this.drawList('#a-chan', 'channels', 'Nuevo canal');
