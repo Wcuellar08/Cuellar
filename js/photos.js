@@ -1,6 +1,6 @@
 // Fotos de prendas: se achican en el iPad antes de guardarlas.
 // - "thumb": miniatura (~160 px) que va dentro de la prenda, para las listas.
-// - "full": foto mediana (~1000 px) que se guarda aparte y se carga solo al abrirla.
+// - "full": foto mediana (~800 px) que se guarda aparte y se carga solo al abrirla.
 
 function loadImage(file) {
   return new Promise((resolve, reject) => {
@@ -28,7 +28,8 @@ function resize(img, max, quality) {
 export async function fileToPhotos(file) {
   if (!file || !file.type.startsWith('image/')) throw new Error('El archivo no es una foto.');
   const img = await loadImage(file);
-  return { full: resize(img, 1000, 0.72), thumb: resize(img, 160, 0.6) };
+  // 800 px y calidad 0.65: se ve bien en el iPad y pesa cerca de la mitad
+  return { full: resize(img, 800, 0.65), thumb: resize(img, 160, 0.6) };
 }
 
 /** Muestra una foto en grande encima de todo (no cierra la ventana que esté abierta). */

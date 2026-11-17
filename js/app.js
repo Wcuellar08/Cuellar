@@ -274,6 +274,11 @@ function homeAlerts() {
     const d = daysSinceBackup();
     if (S().items.length && (d === null || d > 7)) {
       alerts.push({ act: 'backup', tone: 'warn', text: d === null ? 'Todavía no has hecho un respaldo' : `Hace ${d} días que no haces un respaldo`, cta: 'Respaldar' });
+    } else if (hasPhotos()) {
+      const f = daysSinceFullBackup();
+      if (f === null || f > 30) {
+        alerts.push({ act: 'backup', tone: 'info', text: f === null ? 'Haz tu primer respaldo completo (con fotos)' : `Hace ${f} días sin respaldo completo (con fotos)`, cta: 'Respaldar' });
+      }
     }
     const old = S().items.filter((i) => i.status === 'disponible' && Date.now() - new Date(i.createdAt).getTime() > 60 * 86400000).length;
     if (old) alerts.push({ act: 'old', tone: 'info', text: `${old} prenda${old === 1 ? '' : 's'} con más de 60 días sin venderse`, cta: 'Ver' });
@@ -1104,41 +1109,52 @@ function diffBadge(d) {
 }
 
 // =================================================================== RESPALDO
-const BACKUP_KEY = 'ui.lastBackup';
-function daysSinceBackup() {
-  const t = lsGet(BACKUP_KEY, null);
+const BACKUP_KEY = 'ui.lastBackup'; // cualquier respaldo (rápido o completo)
+const FULL_BACKUP_KEY = 'ui.lastFullBackup'; // respaldo completo (con fotos)
+function daysSince(key) {
+  const t = lsGet(key, null);
   return t ? Math.floor((Date.now() - new Date(t).getTime()) / 86400000) : null;
 }
+const daysSinceBackup = () => daysSince(BACKUP_KEY);
+const daysSinceFullBackup = () => daysSince(FULL_BACKUP_KEY);
+const hasPhotos = () => S().items.some((i) => i.status === 'disponible' && i.thumb);
 
-async function downloadBackup() {
-  const btn = $('#a-backup');
+async function downloadBackup(withPhotos) {
+  const btn = $(withPhotos ? '#a-backup-full' : '#a-backup-quick');
+  const label = btn?.innerHTML;
   if (btn) { btn.disabled = true; btn.textContent = 'Preparando…'; }
   let data;
   try {
-    data = await store.exportData();
+    data = await store.exportData({
+      withPhotos,
+      onProgress: (n, total) => { if (btn) btn.textContent = `Preparando fotos… ${n} de ${total}`; },
+    });
   } catch (e) {
     toast('No se pudo preparar el respaldo: ' + e.message, 'err');
     return;
   } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = `${icon('download')} Descargar respaldo`; }
+    if (btn) { btn.disabled = false; btn.innerHTML = label; }
   }
   const nPhotos = Object.keys(data.photos || {}).length;
+  const json = JSON.stringify(data);
+  const mb = json.length / 1024 / 1024;
   // El iPad solo deja abrir "Compartir / Guardar en Archivos" directo desde un toque
   const m = openModal(`
     <div class="modal-body center">
-      <h2>Respaldo listo</h2>
-      <p>${data.items.length} prendas · ${data.sales.length} ventas · ${(data.cortes || []).length} cortes · ${nPhotos} fotos</p>
+      <h2>${withPhotos ? 'Respaldo completo listo' : 'Respaldo rápido listo'}</h2>
+      <p>${data.items.length} prendas · ${data.sales.length} ventas · ${(data.cortes || []).length} cortes${withPhotos ? ` · ${nPhotos} fotos` : ''}</p>
+      <p class="muted small">Tamaño: ${mb < 0.1 ? 'menos de 0.1' : mb.toFixed(1)} MB</p>
       <p class="muted small">Toca "Guardar" y elige <b>Guardar en Archivos</b> → iCloud Drive.</p>
     </div>
     <div class="modal-actions"><span class="grow"></span><button class="btn" data-close>Cancelar</button>
       <button class="btn primary lg" id="bk-save">${icon('download')} Guardar</button></div>`);
-  m.querySelector('#bk-save').addEventListener('click', () => { closeModal(); saveBackupFile(data); });
+  m.querySelector('#bk-save').addEventListener('click', () => { closeModal(); saveBackupFile(data, json, withPhotos); });
 }
 
-async function saveBackupFile(data) {
+async function saveBackupFile(data, json, withPhotos) {
   const now = new Date();
-  const name = `BOOHO_respaldo_${dayKey(now)}_${pad(now.getHours(), 2)}${pad(now.getMinutes(), 2)}.json`;
-  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+  const name = `BOOHO_respaldo_${withPhotos ? 'completo' : 'rapido'}_${dayKey(now)}_${pad(now.getHours(), 2)}${pad(now.getMinutes(), 2)}.json`;
+  const blob = new Blob([json], { type: 'application/json' });
   const file = new File([blob], name, { type: 'application/json' });
   try {
     if (navigator.canShare?.({ files: [file] })) {
@@ -1156,7 +1172,8 @@ async function saveBackupFile(data) {
     return toast('No se pudo guardar el respaldo: ' + e.message, 'err');
   }
   lsSet(BACKUP_KEY, now.toISOString());
-  toast(`Respaldo listo: ${data.items.length} prendas, ${data.sales.length} ventas`);
+  if (withPhotos) lsSet(FULL_BACKUP_KEY, now.toISOString());
+  toast(`Respaldo guardado: ${data.items.length} prendas, ${data.sales.length} ventas`);
   if (ui.tab === 'ajustes') VIEWS.ajustes.drawBackup?.();
 }
 
@@ -1481,7 +1498,7 @@ VIEWS.ajustes = {
         ${isOwner() ? '' : '<p class="muted small">Para cambiar tu contraseña o tu nombre, pídeselo a la dueña.</p>'}
       </section>`;
     if (!isOwner()) {
-      v.innerHTML = myCard + '<p class="muted small center">BOOHO · Registro de Ventas · v1.4</p>';
+      v.innerHTML = myCard + '<p class="muted small center">BOOHO · Registro de Ventas · v1.5</p>';
       $('#a-logout').addEventListener('click', async () => { if (await confirmDialog('¿Cerrar sesión?')) store.logout(); });
       return;
     }
@@ -1494,13 +1511,22 @@ VIEWS.ajustes = {
       </section>
       <section class="card">
         <h3>Respaldo</h3>
-        <p class="muted small">Guarda una copia de todo (prendas, ventas, cortes y ajustes) en un archivo.
-          En el iPad elige <b>Guardar en Archivos</b> → iCloud Drive. Hazlo al menos una vez por semana.</p>
-        <div id="a-backup-status"></div>
-        <div class="row-btns">
-          <button class="btn primary" id="a-backup">${icon('download')} Descargar respaldo</button>
-          <button class="btn" id="a-restore">Restaurar desde archivo</button>
+        <p class="muted small">Guarda una copia en un archivo. En el iPad elige <b>Guardar en Archivos</b> → iCloud Drive.</p>
+        <div class="backup-opts">
+          <div class="backup-opt">
+            <b>Rápido (sin fotos)</b>
+            <span class="muted small">Prendas, ventas, cortes y ajustes. Pesa poco. Hazlo cada semana.</span>
+            <span id="a-bk-quick-status"></span>
+            <button class="btn primary" id="a-backup-quick">${icon('download')} Respaldo rápido</button>
+          </div>
+          <div class="backup-opt">
+            <b>Completo (con fotos)</b>
+            <span class="muted small">Todo lo anterior más las fotos de las prendas disponibles. Hazlo una vez al mes.</span>
+            <span id="a-bk-full-status"></span>
+            <button class="btn" id="a-backup-full">${icon('download')} Respaldo completo</button>
+          </div>
         </div>
+        <div class="row-btns"><button class="btn ghost" id="a-restore">Restaurar desde archivo</button></div>
       </section>
       <section class="card">
         <h3>Tienda</h3>
@@ -1521,7 +1547,7 @@ VIEWS.ajustes = {
       ${isDemo ? `<section class="card"><h3>Modo demo</h3>
         <p class="muted small">Los datos se guardan solo en este dispositivo. Cuando configures Firebase, la app usará la nube y estos datos de prueba no se pasan.</p>
         <button class="btn danger ghost" id="a-reset">Borrar todos los datos de prueba</button></section>` : ''}
-      <p class="muted small center">BOOHO · Registro de Ventas · v1.4</p>`;
+      <p class="muted small center">BOOHO · Registro de Ventas · v1.5</p>`;
     this.drawCats();
     this.drawList('#a-pay', 'paymentMethods', 'Nueva forma de pago');
     this.drawList('#a-chan', 'channels', 'Nuevo canal');
@@ -1538,7 +1564,8 @@ VIEWS.ajustes = {
       if (await confirmDialog('¿Borrar <b>todo</b> (prendas, ventas, usuarios y ajustes) de este dispositivo?', { okText: 'Borrar todo', danger: true })) store.resetDemo();
     });
     $('#a-newuser').addEventListener('click', () => openUserForm());
-    $('#a-backup').addEventListener('click', () => downloadBackup());
+    $('#a-backup-quick').addEventListener('click', () => downloadBackup(false));
+    $('#a-backup-full').addEventListener('click', () => downloadBackup(true));
     $('#a-restore').addEventListener('click', () => restoreBackup());
     this.drawBackup();
     $('#a-users').addEventListener('click', (e) => {
@@ -1547,12 +1574,15 @@ VIEWS.ajustes = {
     });
   },
   drawBackup() {
-    const el = $('#a-backup-status');
-    if (!el) return;
-    const d = daysSinceBackup();
-    el.innerHTML = d === null
-      ? '<p class="diff warn">Todavía no has hecho ningún respaldo desde este iPad.</p>'
-      : `<p class="${d > 7 ? 'diff warn' : 'muted small'}">Último respaldo desde este iPad: ${d === 0 ? 'hoy' : d === 1 ? 'ayer' : `hace ${d} días`}.</p>`;
+    const show = (sel, d, limit) => {
+      const el = $(sel);
+      if (!el) return;
+      const when = d === null ? 'Nunca desde este iPad' : `Último: ${d === 0 ? 'hoy' : d === 1 ? 'ayer' : `hace ${d} días`}`;
+      el.className = d === null || d > limit ? 'bk-status warn' : 'bk-status';
+      el.textContent = when;
+    };
+    show('#a-bk-quick-status', daysSinceBackup(), 7);
+    show('#a-bk-full-status', daysSinceFullBackup(), 30);
   },
   refresh() {
     const el = $('#a-users');

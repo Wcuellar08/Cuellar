@@ -249,7 +249,13 @@ function createLocalStore() {
     },
     async pauseSync() {},
     async resumeSync() {},
-    async exportData() { return buildBackup(store.state, { ...photos }); },
+    async exportData({ withPhotos = false } = {}) {
+      const keep = {};
+      if (withPhotos) {
+        db.items.filter((i) => i.status === 'disponible' && photos[i.id]).forEach((i) => { keep[i.id] = photos[i.id]; });
+      }
+      return buildBackup(store.state, keep);
+    },
     async importData(data) {
       ownerOnly();
       checkBackup(data);
@@ -583,13 +589,22 @@ async function createFirebaseStore() {
       clearTimeout(store._resumeTimer);
       await F.enableNetwork(db).catch(() => {});
     },
-    async exportData() {
+    /**
+     * withPhotos = false: respaldo rápido (sin fotos grandes).
+     * withPhotos = true: incluye las fotos grandes solo de las prendas disponibles.
+     */
+    async exportData({ withPhotos = false, onProgress } = {}) {
       const photos = {};
-      try {
-        const snap = await F.getDocs(F.collection(db, 'photos'));
-        snap.forEach((d) => { if (d.data().data) photos[d.id] = d.data().data; });
-      } catch (e) {
-        console.error(e);
+      if (withPhotos) {
+        if (!navigator.onLine) throw new Error('Se necesita internet para el respaldo con fotos.');
+        const ids = store.state.items.filter((i) => i.status === 'disponible' && i.thumb).map((i) => i.id);
+        // Firestore permite buscar hasta 30 documentos a la vez por su id
+        for (let i = 0; i < ids.length; i += 30) {
+          const q = F.query(F.collection(db, 'photos'), F.where(F.documentId(), 'in', ids.slice(i, i + 30)));
+          const snap = await F.getDocs(q);
+          snap.forEach((d) => { if (d.data().data) photos[d.id] = d.data().data; });
+          onProgress?.(Math.min(ids.length, i + 30), ids.length);
+        }
       }
       return buildBackup(store.state, photos);
     },

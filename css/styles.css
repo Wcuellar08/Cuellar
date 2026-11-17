@@ -492,3 +492,11 @@ h3.mt { margin-top: 18px; }
 #photo-viewer img { max-width: 100%; max-height: calc(100vh - 120px); border-radius: 12px; object-fit: contain; background: #fff; }
 .pv-cap { color: #fff; font-weight: 600; }
 .pv-close { position: absolute; top: calc(16px + var(--safe-t)); right: 16px; width: 48px; height: 48px; border-radius: 50%; border: none; background: rgba(255,255,255,.15); color: #fff; font-size: 22px; }
+
+/* ---------- respaldo ---------- */
+.backup-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.backup-opt { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+.backup-opt .btn { margin-top: auto; }
+.bk-status { font-size: .85rem; color: var(--muted); }
+.bk-status.warn { color: var(--warn); font-weight: 700; }
+@media (max-width: 560px) { .backup-opts { grid-template-columns: 1fr; } }
