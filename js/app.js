@@ -146,10 +146,10 @@ function renderLogin(app) {
         <h1>Bienvenido a BOOHO</h1>
         ${isDemo ? `
           <p class="muted">Estás en <b>modo demo</b>: los datos se guardan solo en este dispositivo.
-          Cuando conectemos Firebase, cada persona entrará con su correo y contraseña.</p>
+          Cuando conectemos Firebase, cada persona entrará con su usuario y contraseña.</p>
           <label>Tu nombre<input id="l-name" autocomplete="name" placeholder="Ej. María"></label>
         ` : `
-          <label>Correo<input id="l-email" type="email" autocomplete="username" autocapitalize="off"></label>
+          <label>Usuario<input id="l-email" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Ej. maria"></label>
           <label>Contraseña<input id="l-pass" type="password" autocomplete="current-password"></label>
         `}
         <p id="l-err" class="err-text"></p>
@@ -171,7 +171,7 @@ function renderLogin(app) {
     } catch (e) {
       const c = e.code || '';
       err.textContent = c.includes('invalid') || c.includes('wrong') || c.includes('not-found')
-        ? 'Correo o contraseña incorrectos.'
+        ? 'Usuario o contraseña incorrectos.'
         : c.includes('network') ? 'Sin conexión a internet.' : 'No se pudo entrar: ' + (e.message || c);
       const b = $('#l-go'); if (b) b.disabled = false;
     }
@@ -938,7 +938,7 @@ VIEWS.ajustes = {
       <div class="save-bar"><p id="a-err" class="err-text"></p><button class="btn primary lg" id="a-save">Guardar cambios</button></div>
       <section class="card">
         <h3>Mi usuario</h3>
-        <p>${esc(u.name || '')} ${u.email ? `<span class="muted">(${esc(u.email)})</span>` : ''}</p>
+        <p>${esc(u.name || '')} ${u.email ? `<span class="muted">(usuario: ${esc(u.email.replace(/@booho\.app$/, ''))})</span>` : ''}</p>
         <div class="row-btns">
           <button class="btn" id="a-rename">Cambiar mi nombre</button>
           <button class="btn danger ghost" id="a-logout">Cerrar sesión</button>

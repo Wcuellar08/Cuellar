@@ -8,6 +8,7 @@ import { DEFAULT_SETTINGS } from './defaults.js';
 import { pad } from './util.js';
 
 export const isDemo = !firebaseConfig || !firebaseConfig.apiKey;
+export const USER_DOMAIN = 'booho.app';
 
 function mergeSettings(s) {
   return { ...structuredClone(DEFAULT_SETTINGS), ...(s || {}) };
@@ -220,7 +221,11 @@ async function createFirebaseStore() {
         store.emitAuth();
       });
     },
-    async login(email, password) {
+    async login(username, password) {
+      // Se entra con un nombre de usuario (ej. "maria"). Por dentro, Firebase lo guarda
+      // como "maria@booho.app" (no es un correo real, nunca se envía nada ahí).
+      const u = username.trim().toLowerCase();
+      const email = u.includes('@') ? u : `${u.replace(/\s+/g, '')}@${USER_DOMAIN}`;
       await A.signInWithEmailAndPassword(auth, email, password);
     },
     async logout() {
