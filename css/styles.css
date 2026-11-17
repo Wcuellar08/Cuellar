@@ -294,44 +294,74 @@ tr.sub td:first-child { padding-left: 16px; }
 }
 
 /* ---------- impresión de etiquetas ---------- */
-#print-area { display: none; }
+/* En pantalla: vista de impresión a tamaño real. Al imprimir: solo las etiquetas. */
+#print-area, #print-toolbar { display: none; }
+body.printing { overflow: hidden; }
+body.printing #print-toolbar {
+  display: block; position: fixed; top: 0; left: 0; right: 0; z-index: 61;
+  background: #fff; border-bottom: 1px solid var(--line);
+  padding: calc(12px + var(--safe-t)) 20px 10px;
+}
+.ptb-row { display: flex; align-items: center; gap: 12px; }
+.ptb-title { flex: 1; display: flex; flex-direction: column; }
+.ptb-title span { color: var(--muted); font-size: .9rem; }
+.ptb-help { margin: 8px 0 0; font-size: .85rem; color: var(--muted); line-height: 1.4; }
+.ptb-ic { display: inline-block; padding: 0 5px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); }
+body.printing #print-area {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  position: fixed; top: 140px; left: 0; right: 0; bottom: 0; z-index: 60;
+  overflow: auto; -webkit-overflow-scrolling: touch; background: #dfe6ed; padding: 24px 12px 60px;
+}
+#print-area .label {
+  display: flex; align-items: center; overflow: hidden; color: #000; background: #fff;
+  outline: 1px dashed #9aa8b5; page-break-inside: avoid; break-inside: avoid; flex: none;
+}
+#print-area .label.blank { background: #f3f5f7; }
+#print-area .label-qr svg { width: 100%; height: 100%; display: block; }
+#print-area .label-info { min-width: 0; line-height: 1.12; }
+#print-area .label-store { font-size: 6.5pt; text-transform: uppercase; letter-spacing: .04em; }
+#print-area .label-code { font-family: Menlo, monospace; font-weight: 800; }
+#print-area .label-desc { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#print-area .label-price { font-weight: 800; }
+
+/* Hoja carta 3 x 10 (Avery 5160: 2.625in x 1in) */
+body.printing #print-area.fmt-carta {
+  display: grid; grid-template-columns: repeat(3, 2.625in); grid-auto-rows: 1in; gap: 0 .125in;
+  justify-content: center; align-content: start;
+}
+#print-area.fmt-carta .label { width: 2.625in; height: 1in; padding: .06in .12in; gap: .08in; }
+#print-area.fmt-carta .label-qr { width: .8in; height: .8in; flex: none; }
+#print-area.fmt-carta .label-code { font-size: 11pt; }
+#print-area.fmt-carta .label-desc, #print-area.fmt-carta .label-size { font-size: 7pt; }
+#print-area.fmt-carta .label-price { font-size: 11pt; }
+
+/* Etiquetas individuales */
+#print-area.fmt-50x30 .label { width: 50mm; height: 30mm; padding: 2mm; gap: 2mm; }
+#print-area.fmt-50x30 .label-qr { width: 22mm; height: 22mm; flex: none; }
+#print-area.fmt-50x30 .label-code { font-size: 10pt; }
+#print-area.fmt-50x30 .label-desc, #print-area.fmt-50x30 .label-size { font-size: 6.5pt; }
+#print-area.fmt-50x30 .label-price { font-size: 10pt; }
+#print-area.fmt-40x30 .label { width: 40mm; height: 30mm; padding: 1.5mm; gap: 1.5mm; }
+#print-area.fmt-40x30 .label-qr { width: 18mm; height: 18mm; flex: none; }
+#print-area.fmt-40x30 .label-code { font-size: 8.5pt; }
+#print-area.fmt-40x30 .label-desc, #print-area.fmt-40x30 .label-size, #print-area.fmt-40x30 .label-store { font-size: 5.5pt; }
+#print-area.fmt-40x30 .label-price { font-size: 9pt; }
+#print-area.fmt-58x40 .label { width: 58mm; height: 40mm; padding: 3mm; gap: 3mm; }
+#print-area.fmt-58x40 .label-qr { width: 30mm; height: 30mm; flex: none; }
+#print-area.fmt-58x40 .label-code { font-size: 12pt; }
+#print-area.fmt-58x40 .label-desc, #print-area.fmt-58x40 .label-size { font-size: 8pt; }
+#print-area.fmt-58x40 .label-price { font-size: 12pt; }
+
 @media print {
   body.printing > *:not(#print-area) { display: none !important; }
-  body.printing { background: #fff; }
-  body.printing #print-area { display: block; }
-  #print-area .label { display: flex; align-items: center; overflow: hidden; color: #000; page-break-inside: avoid; break-inside: avoid; }
-  #print-area .label-qr svg { width: 100%; height: 100%; display: block; }
-  #print-area .label-info { min-width: 0; line-height: 1.12; }
-  #print-area .label-store { font-size: 6.5pt; text-transform: uppercase; letter-spacing: .04em; }
-  #print-area .label-code { font-family: Menlo, monospace; font-weight: 800; }
-  #print-area .label-desc { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #print-area .label-price { font-weight: 800; }
-
-  /* Hoja carta 3 x 10 (Avery 5160: 2.625in x 1in) */
-  body.printing #print-area.fmt-carta { display: grid; grid-template-columns: repeat(3, 2.625in); grid-auto-rows: 1in; column-gap: .125in; }
-  #print-area.fmt-carta .label { width: 2.625in; height: 1in; padding: .06in .12in; gap: .08in; }
-  #print-area.fmt-carta .label-qr { width: .8in; height: .8in; flex: none; }
-  #print-area.fmt-carta .label-code { font-size: 11pt; }
-  #print-area.fmt-carta .label-desc, #print-area.fmt-carta .label-size { font-size: 7pt; }
-  #print-area.fmt-carta .label-price { font-size: 11pt; }
-
-  /* Etiquetas individuales */
+  body.printing { background: #fff; overflow: visible; }
+  body.printing #print-area {
+    position: static; overflow: visible; background: #fff; padding: 0; gap: 0; align-items: flex-start;
+  }
+  body.printing #print-area.fmt-carta { justify-content: start; }
+  #print-area .label { outline: none; }
+  #print-area .label.blank { background: none; }
   #print-area[class^="fmt-"]:not(.fmt-carta) .label { page-break-after: always; break-after: page; }
-  #print-area.fmt-50x30 .label { width: 50mm; height: 30mm; padding: 2mm; gap: 2mm; }
-  #print-area.fmt-50x30 .label-qr { width: 22mm; height: 22mm; flex: none; }
-  #print-area.fmt-50x30 .label-code { font-size: 10pt; }
-  #print-area.fmt-50x30 .label-desc, #print-area.fmt-50x30 .label-size { font-size: 6.5pt; }
-  #print-area.fmt-50x30 .label-price { font-size: 10pt; }
-  #print-area.fmt-40x30 .label { width: 40mm; height: 30mm; padding: 1.5mm; gap: 1.5mm; }
-  #print-area.fmt-40x30 .label-qr { width: 18mm; height: 18mm; flex: none; }
-  #print-area.fmt-40x30 .label-code { font-size: 8.5pt; }
-  #print-area.fmt-40x30 .label-desc, #print-area.fmt-40x30 .label-size, #print-area.fmt-40x30 .label-store { font-size: 5.5pt; }
-  #print-area.fmt-40x30 .label-price { font-size: 9pt; }
-  #print-area.fmt-58x40 .label { width: 58mm; height: 40mm; padding: 3mm; gap: 3mm; }
-  #print-area.fmt-58x40 .label-qr { width: 30mm; height: 30mm; flex: none; }
-  #print-area.fmt-58x40 .label-code { font-size: 12pt; }
-  #print-area.fmt-58x40 .label-desc, #print-area.fmt-58x40 .label-size { font-size: 8pt; }
-  #print-area.fmt-58x40 .label-price { font-size: 12pt; }
 }
 
 /* ---------- gráficos ---------- */

@@ -4,11 +4,12 @@ import { esc, money } from './util.js';
 export const LABEL_FORMATS = {
   carta: {
     name: 'Hoja carta – 30 etiquetas (tipo Avery 5160, 2⅝" × 1")',
+    short: 'Hoja carta',
     page: '@page { size: letter; margin: 0.5in 0.19in 0.5in 0.19in; }',
   },
-  '50x30': { name: 'Impresora de etiquetas 50 × 30 mm', page: '@page { size: 50mm 30mm; margin: 0; }' },
-  '40x30': { name: 'Impresora de etiquetas 40 × 30 mm', page: '@page { size: 40mm 30mm; margin: 0; }' },
-  '58x40': { name: 'Impresora de etiquetas 58 × 40 mm', page: '@page { size: 58mm 40mm; margin: 0; }' },
+  '50x30': { name: 'Impresora de etiquetas 50 × 30 mm', short: '50 × 30 mm', page: '@page { size: 50mm 30mm; margin: 0; }' },
+  '40x30': { name: 'Impresora de etiquetas 40 × 30 mm', short: '40 × 30 mm', page: '@page { size: 40mm 30mm; margin: 0; }' },
+  '58x40': { name: 'Impresora de etiquetas 58 × 40 mm', short: '58 × 40 mm', page: '@page { size: 58mm 40mm; margin: 0; }' },
 };
 
 export function qrSvg(text) {
@@ -31,6 +32,20 @@ export function labelHtml(item, title, storeName) {
   </div>`;
 }
 
+/** Imprime ya. Debe llamarse directo desde el toque del botón (si no, el iPad lo bloquea). */
+function doPrint() {
+  try {
+    window.print();
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+/**
+ * Muestra la vista de impresión (las etiquetas a tamaño real) y abre la ventana de imprimir.
+ * Si el navegador no abre la ventana, la vista se queda con las instrucciones para imprimir
+ * desde el menú del navegador.
+ */
 export function printLabels(entries, format, storeName) {
   const area = document.getElementById('print-area');
   area.className = `fmt-${format}`;
@@ -44,17 +59,35 @@ export function printLabels(entries, format, storeName) {
     document.head.appendChild(st);
   }
   st.textContent = `@media print { ${LABEL_FORMATS[format].page} }`;
+
+  let bar = document.getElementById('print-toolbar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'print-toolbar';
+    document.body.appendChild(bar);
+  }
+  const count = entries.filter((e) => !e.blank).length;
+  bar.innerHTML = `
+    <div class="ptb-row">
+      <div class="ptb-title"><b>Vista de impresión</b><span>${count} etiqueta${count === 1 ? '' : 's'} · ${esc(LABEL_FORMATS[format].short)}</span></div>
+      <button class="btn" id="ptb-close">Cerrar</button>
+      <button class="btn primary lg" id="ptb-print">Imprimir</button>
+    </div>
+    <p class="ptb-help">¿No se abrió la ventana de imprimir? Usa el menú del navegador:
+      en <b>Safari</b> toca Compartir <span class="ptb-ic">⬆︎</span> → <b>Imprimir</b>;
+      en <b>Chrome</b> toca <span class="ptb-ic">⋯</span> → Compartir → <b>Imprimir</b>.
+      Si abriste BOOHO desde el ícono de la pantalla de inicio y no sale, ábrela en Safari.</p>`;
+  bar.querySelector('#ptb-print').addEventListener('click', doPrint);
+  bar.querySelector('#ptb-close').addEventListener('click', closePrintPreview);
   document.body.classList.add('printing');
-  const cleanup = () => {
-    document.body.classList.remove('printing');
-    area.innerHTML = '';
-    window.removeEventListener('afterprint', cleanup);
-  };
-  window.addEventListener('afterprint', cleanup);
-  // Pequeña pausa para que el navegador dibuje los códigos antes de imprimir
-  setTimeout(() => {
-    window.print();
-    // Safari en iPad a veces no dispara "afterprint"
-    setTimeout(() => document.body.classList.contains('printing') && cleanup(), 1500);
-  }, 150);
+  area.style.top = bar.offsetHeight + 'px';
+  area.scrollTop = 0;
+  // Se llama en el mismo toque del botón "Imprimir" de la ventana de etiquetas
+  doPrint();
+}
+
+export function closePrintPreview() {
+  document.body.classList.remove('printing');
+  const area = document.getElementById('print-area');
+  if (area) area.innerHTML = '';
 }
