@@ -1107,12 +1107,34 @@ function groupCount(rows, group, keyFn, amountFn) {
   rows.forEach((r) => {
     const [cat, sub] = keyFn(r);
     const name = group === 'sub' ? `${cat} › ${sub || 'Sin subcategoría'}` : cat;
-    const g = m.get(name) || { name, count: 0, amount: 0 };
+    const g = m.get(name) || { name, cat, count: 0, amount: 0 };
     g.count++;
     g.amount += amountFn(r);
     m.set(name, g);
   });
   return [...m.values()].sort((a, b) => b.count - a.count || b.amount - a.amount);
+}
+
+// Colores de categoría (paleta validada para daltonismo). Cada categoría tiene siempre el
+// mismo color, según su lugar en Ajustes; sus subcategorías usan el color de la categoría.
+const CAT_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948'];
+let catColorMap = null;
+/**
+ * Reparte los colores entre las categorías que aparecen en los gráficos de la pantalla
+ * (en el orden de Ajustes), para que no se repitan mientras haya 8 o menos.
+ */
+function setChartCategories(names) {
+  const order = (n) => {
+    const i = S().settings.categories.findIndex((c) => c.name === n);
+    return i < 0 ? 999 : i;
+  };
+  const uniq = [...new Set(names)].sort((a, b) => order(a) - order(b) || String(a).localeCompare(String(b)));
+  catColorMap = new Map(uniq.map((n, i) => [n, CAT_COLORS[i % CAT_COLORS.length]]));
+}
+function catColor(name) {
+  if (catColorMap?.has(name)) return catColorMap.get(name);
+  const i = [...String(name || '')].reduce((a, ch) => a + ch.charCodeAt(0), 0);
+  return CAT_COLORS[i % CAT_COLORS.length];
 }
 
 function hbarChart(title, subtitle, data, countWord, amountWord, emptyMsg) {
@@ -1133,7 +1155,7 @@ function hbarChart(title, subtitle, data, countWord, amountWord, emptyMsg) {
     return `<div class="hbar-row ${x.other ? 'other' : ''}" role="listitem" tabindex="0"
         aria-label="${esc(x.name)}: ${x.count} ${countWord}, ${pctTxt}" data-tip="${esc(tip)}">
       <div class="hbar-label">${x.count === max && !x.other ? '<span class="hbar-top">★</span>' : ''}${esc(x.name)}</div>
-      <div class="hbar-track"><div class="hbar-bar" style="width:calc((100% - 40px) * ${(x.count / max).toFixed(4)})"></div><span class="hbar-val">${x.count}</span></div>
+      <div class="hbar-track"><div class="hbar-bar" style="width:calc((100% - 40px) * ${(x.count / max).toFixed(4)});${x.other ? '' : `background:${catColor(x.cat)}`}"></div><span class="hbar-val">${x.count}</span></div>
     </div>`;
   }).join('')}</div>` : `<p class="empty">${emptyMsg}</p>`;
   return `<section class="card chart-card">
@@ -1301,12 +1323,16 @@ VIEWS.reportes = {
         </div>
       </div>
       <div class="chart-grid">
-        ${hbarChart('Lo que más vendes', `Prendas vendidas del ${fmtDate(ui.rep.from + 'T12:00:00')} al ${fmtDate(ui.rep.to + 'T12:00:00')}`,
-          groupCount(r.lines, ui.rep.group, (l) => [l.category, l.subcategory], (l) => l.finalPrice), 'vendidas', 'en ventas',
-          'Aún no hay ventas en este periodo.')}
-        ${hbarChart('Lo que más tienes en inventario', 'Prendas disponibles hoy',
-          groupCount(r.inventory, ui.rep.group, (i) => [i.categoryName, i.subcategory], (i) => i.price || 0), 'disponibles', 'a precio de venta',
-          'No hay prendas disponibles.')}
+        ${(() => {
+          const sold = groupCount(r.lines, ui.rep.group, (l) => [l.category, l.subcategory], (l) => l.finalPrice);
+          const inv = groupCount(r.inventory, ui.rep.group, (i) => [i.categoryName, i.subcategory], (i) => i.price || 0);
+          const shown = (d) => (d.length > 10 ? d.slice(0, 9) : d);
+          setChartCategories([...shown(sold), ...shown(inv)].map((x) => x.cat));
+          return hbarChart('Lo que más vendes', `Prendas vendidas del ${fmtDate(ui.rep.from + 'T12:00:00')} al ${fmtDate(ui.rep.to + 'T12:00:00')}`,
+              sold, 'vendidas', 'en ventas', 'Aún no hay ventas en este periodo.')
+            + hbarChart('Lo que más tienes en inventario', 'Prendas disponibles hoy',
+              inv, 'disponibles', 'a precio de venta', 'No hay prendas disponibles.');
+        })()}
       </div>
       <div class="rep-grid">
         ${table('Por categoría', ['Categoría', 'Prendas', 'Ventas', 'Ganancia'], r.byCat.flatMap((c) => [
