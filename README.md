@@ -20,7 +20,13 @@ App para iPad, que se abre en Safari, para llevar el inventario, registrar venta
   - Por forma de pago
   - Por canal
   - Inventario
-- **Varias personas**: cada quien entra con su usuario, y queda registrado quién vendió.
+- **Usuarios**: cada quien entra con un nombre de usuario y contraseña, y queda registrado quién vendió.
+  La primera vez, la app pide crear el usuario de la **dueña**. Desde **Ajustes › Usuarios** la dueña:
+  - crea usuarios;
+  - ve y cambia contraseñas;
+  - desactiva cuentas.
+- **Permisos**: la **dueña** ve todo. Un **ayudante** vende, registra prendas, imprime etiquetas y hace devoluciones,
+  pero no ve costos, ganancias, reportes ni ajustes, y no puede borrar prendas.
 - **Funciona sin internet**: las ventas se guardan y se sincronizan cuando vuelve la conexión.
   Lo único que necesita internet es **crear prendas nuevas**, porque así se garantiza que el número sea único.
 
@@ -33,11 +39,11 @@ Mientras Firebase no esté configurado, la app funciona en **modo demo**: los da
 1. Entra a <https://console.firebase.google.com> con tu cuenta de Google.
    Toca **Crear un proyecto**, ponle un nombre (ej. `mi-tienda-ventas`) y puedes desactivar Google Analytics.
 2. **Usuarios**:
-   - Ve a **Compilación › Authentication › Comenzar**.
-   - Elige **Correo electrónico/contraseña**, actívalo y guarda.
-   - En la pestaña **Usuarios**, toca **Agregar usuario** para cada persona que va a usar la app (correo y contraseña).
-   - En **Configuración › Acciones del usuario**, **desactiva "Habilitar creación (registro)"**.
-     Así solo entran las personas que tú agregues.
+   - Ve a **Seguridad › Authentication › Comenzar**.
+   - Elige **Correo electrónico/contraseña**, activa solo el primer interruptor y guarda.
+   - **No agregues usuarios ahí**: se crean desde la app.
+     Deja activado "Habilitar creación (registro)" en **Configuración › Acciones del usuario**.
+     Una cuenta que no fue creada por la dueña desde la app no puede ver ni tocar nada (lo impiden las reglas).
 3. **Base de datos**:
    - Ve a **Compilación › Firestore Database › Crear base de datos**.
    - Elige una ubicación (ej. `nam5 (United States)`) y **modo de producción**.

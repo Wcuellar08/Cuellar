@@ -1,4 +1,4 @@
-import { createStore, isDemo } from './store.js';
+import { cleanUsername, createStore, isDemo, ROLES, validatePassword, validateUsername } from './store.js';
 import { CONDITIONS, GENDERS, SIZE_SUGGESTIONS } from './defaults.js';
 import {
   $, $$, catById, catName, closeModal, confirmDialog, dayKey, esc, fmtDate, fmtDateTime, itemMeta,
@@ -50,9 +50,11 @@ const TABS = [
   ['vender', 'Vender', 'sell'],
   ['inventario', 'Inventario', 'box'],
   ['ventas', 'Ventas', 'receipt'],
-  ['reportes', 'Reportes', 'chart'],
+  ['reportes', 'Reportes', 'chart', 'owner'],
   ['ajustes', 'Ajustes', 'gear'],
 ];
+const isOwner = () => store.isOwner();
+const visibleTabs = () => TABS.filter((t) => t[3] !== 'owner' || isOwner());
 
 /** Reemplaza el contenido salvo que el usuario esté escribiendo dentro. */
 function safeSet(el, html) {
@@ -90,20 +92,21 @@ function renderApp() {
   const user = S().user;
   const app = $('#app');
   if (!user) return renderLogin(app);
+  if (!visibleTabs().some((t) => t[0] === ui.tab)) ui.tab = 'vender';
   app.innerHTML = `
     <header class="topbar">
       <div class="brand">${icon('tag')}<span id="store-name">${esc(S().settings.storeName)}</span>
         ${isDemo ? '<span class="badge warn">Modo demo</span>' : ''}</div>
-      <div class="top-right"><span id="net" class="net"></span><span class="who">${esc(user.name || user.email || '')}</span></div>
+      <div class="top-right"><span id="net" class="net"></span><span class="who">${esc(user.name || user.username || '')}${isOwner() ? '' : ' · Ayudante'}</span></div>
     </header>
     <main id="view"></main>
-    <nav class="tabbar">${TABS.map(([id, label, ic]) =>
+    <nav class="tabbar">${visibleTabs().map(([id, label, ic]) =>
       `<button data-tab="${id}" class="${ui.tab === id ? 'active' : ''}">${icon(ic)}<span>${label}</span></button>`).join('')}
     </nav>`;
   $$('.tabbar button').forEach((b) => b.addEventListener('click', () => switchTab(b.dataset.tab)));
   updateNetBadge();
   mountView();
-  if (!user.name) askName();
+  if (!user.name && isOwner()) askName();
 }
 
 function updateNetBadge() {
@@ -138,42 +141,58 @@ function refreshView() {
 }
 
 // =================================================================== login
-function renderLogin(app) {
+async function renderLogin(app) {
+  app.innerHTML = '<div class="loading">Cargando…</div>';
+  const setup = await store.needsSetup();
+  if (S().user) return; // entró mientras se consultaba
+  const pre = store.takeLoginError?.() || '';
   app.innerHTML = `
     <div class="login">
       <div class="login-card">
         <div class="login-logo">${icon('tag')}</div>
         <h1>Bienvenido a BOOHO</h1>
-        ${isDemo ? `
-          <p class="muted">Estás en <b>modo demo</b>: los datos se guardan solo en este dispositivo.
-          Cuando conectemos Firebase, cada persona entrará con su usuario y contraseña.</p>
+        ${isDemo ? '<p class="muted small">Estás en <b>modo demo</b>: los datos se guardan solo en este dispositivo.</p>' : ''}
+        ${setup ? `
+          <p class="muted">Primera vez: crea tu usuario de <b>dueña</b>. Después, desde <b>Ajustes › Usuarios</b>, creas a las demás personas.</p>
           <label>Tu nombre<input id="l-name" autocomplete="name" placeholder="Ej. María"></label>
-        ` : `
-          <label>Usuario<input id="l-email" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Ej. maria"></label>
-          <label>Contraseña<input id="l-pass" type="password" autocomplete="current-password"></label>
-        `}
-        <p id="l-err" class="err-text"></p>
-        <button id="l-go" class="btn primary lg block">Entrar</button>
+        ` : ''}
+        <label>Usuario<input id="l-user" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Ej. maria"></label>
+        <label>Contraseña<input id="l-pass" type="password" autocomplete="${setup ? 'new-password' : 'current-password'}"></label>
+        ${setup ? '<label>Repite la contraseña<input id="l-pass2" type="password" autocomplete="new-password"></label>' : ''}
+        <p id="l-err" class="err-text">${esc(pre)}</p>
+        <button id="l-go" class="btn primary lg block">${setup ? 'Crear y entrar' : 'Entrar'}</button>
       </div>
     </div>`;
   const go = async () => {
     const err = $('#l-err');
     err.textContent = '';
+    const username = cleanUsername($('#l-user').value);
+    const password = $('#l-pass').value;
+    if (setup) {
+      const name = $('#l-name').value.trim();
+      if (!name) return (err.textContent = 'Escribe tu nombre.');
+      const e1 = validateUsername(username) || validatePassword(password);
+      if (e1) return (err.textContent = e1);
+      if (password !== $('#l-pass2').value) return (err.textContent = 'Las contraseñas no coinciden.');
+    } else if (!username || !password) {
+      return (err.textContent = 'Escribe tu usuario y contraseña.');
+    }
+    const btn = $('#l-go');
+    btn.disabled = true;
     try {
-      if (isDemo) {
-        const n = $('#l-name').value.trim();
-        if (!n) return (err.textContent = 'Escribe tu nombre');
-        await store.login(n);
-      } else {
-        $('#l-go').disabled = true;
-        await store.login($('#l-email').value.trim(), $('#l-pass').value);
-      }
+      if (setup) await store.setupOwner({ username, name: $('#l-name').value.trim(), password });
+      else await store.login(username, password);
+      // Si Firebase rechazó el perfil (desactivado, etc.) se vuelve a mostrar con el mensaje
+      setTimeout(() => {
+        if (!S().user && $('#l-err')) {
+          const m = store.takeLoginError?.();
+          if (m) $('#l-err').textContent = m;
+          if ($('#l-go')) $('#l-go').disabled = false;
+        }
+      }, 1500);
     } catch (e) {
-      const c = e.code || '';
-      err.textContent = c.includes('invalid') || c.includes('wrong') || c.includes('not-found')
-        ? 'Usuario o contraseña incorrectos.'
-        : c.includes('network') ? 'Sin conexión a internet.' : 'No se pudo entrar: ' + (e.message || c);
-      const b = $('#l-go'); if (b) b.disabled = false;
+      err.textContent = e.message || 'No se pudo entrar.';
+      btn.disabled = false;
     }
   };
   $('#l-go').addEventListener('click', go);
@@ -394,7 +413,7 @@ async function checkout() {
     date: now.toISOString(), folio, items: lines, subtotal: t.tagTotal, discount: round2(t.tagTotal - t.total),
     total: t.total, paymentMethod: ui.payment, channel: ui.channel,
     customerName: ui.customer.name.trim(), customerPhone: ui.customer.phone.trim(),
-    sellerUid: S().user.uid, sellerName: S().user.name || S().user.email || '',
+    sellerUid: S().user.uid, sellerName: S().user.name || S().user.username || '',
   };
   try {
     await store.createSale(sale);
@@ -498,7 +517,7 @@ function openItemForm(item = null) {
         <label>Género<select id="f-gender"><option value=""></option>${opts(GENDERS, d.gender)}</select></label>
       </div>
       <div class="grid2">
-        <label>Costo (Q)<input id="f-cost" inputmode="decimal" value="${d.cost ?? ''}" placeholder="0.00"></label>
+        ${isOwner() ? `<label>Costo (Q)<input id="f-cost" inputmode="decimal" value="${d.cost ?? ''}" placeholder="0.00"></label>` : ''}
         <label>Precio de venta (Q) *<input id="f-price" inputmode="decimal" value="${d.price ?? ''}" placeholder="0.00"></label>
       </div>
       ${!isNew && !sold ? '<p class="muted small">Si cambias la categoría, el código se queda igual.</p>' : ''}
@@ -507,7 +526,7 @@ function openItemForm(item = null) {
       <p id="f-err" class="err-text"></p>
     </div>
     <div class="modal-actions">
-      ${!isNew && !sold ? `<button class="btn danger ghost" id="f-del">Eliminar</button>` : ''}
+      ${!isNew && !sold && isOwner() ? `<button class="btn danger ghost" id="f-del">Eliminar</button>` : ''}
       ${!isNew ? `<button class="btn" id="f-label">${icon('tag')} Etiqueta</button>` : ''}
       <span class="grow"></span>
       <button class="btn" data-close>Cancelar</button>
@@ -529,8 +548,10 @@ function openItemForm(item = null) {
     const data = {
       categoryId: val('#f-cat'), subcategory: val('#f-sub'), description: val('#f-desc'),
       size: val('#f-size'), brand: val('#f-brand'), color: val('#f-color'), condition: val('#f-cond'),
-      gender: val('#f-gender'), cost: round2(parseNum(val('#f-cost'))), price: round2(parseNum(val('#f-price'))),
+      gender: val('#f-gender'), price: round2(parseNum(val('#f-price'))),
     };
+    if (isOwner()) data.cost = round2(parseNum(val('#f-cost')));
+    else if (isNew) data.cost = 0;
     const err = m.querySelector('#f-err');
     if (!data.categoryId) return (err.textContent = 'Elige una categoría.');
     if (!(data.price > 0)) return (err.textContent = 'Escribe el precio de venta.');
@@ -918,9 +939,29 @@ VIEWS.reportes = {
 // =================================================================== AJUSTES
 VIEWS.ajustes = {
   mount(v) {
-    if (!ui.draft) ui.draft = structuredClone(S().settings);
     const u = S().user;
+    const myCard = `
+      <section class="card">
+        <h3>Mi usuario</h3>
+        <p>${esc(u.name || '')} <span class="muted">· usuario <b>${esc(u.username || '')}</b> · ${esc(ROLES[u.role] || '')}</span></p>
+        <div class="row-btns">
+          ${isOwner() ? '<button class="btn" id="a-rename">Cambiar mi nombre</button>' : ''}
+          <button class="btn danger ghost" id="a-logout">Cerrar sesión</button>
+        </div>
+        ${isOwner() ? '' : '<p class="muted small">Para cambiar tu contraseña o tu nombre, pídeselo a la dueña.</p>'}
+      </section>`;
+    if (!isOwner()) {
+      v.innerHTML = myCard + '<p class="muted small center">BOOHO · Registro de Ventas · v1.3</p>';
+      $('#a-logout').addEventListener('click', async () => { if (await confirmDialog('¿Cerrar sesión?')) store.logout(); });
+      return;
+    }
+    if (!ui.draft) ui.draft = structuredClone(S().settings);
     v.innerHTML = `
+      <section class="card">
+        <div class="card-head"><h3>Usuarios</h3><button class="btn small primary" id="a-newuser">${icon('plus')} Nuevo usuario</button></div>
+        <p class="muted small"><b>Dueña</b>: ve y hace todo. <b>Ayudante</b>: vende, registra prendas, imprime etiquetas y hace devoluciones; no ve costos, ganancias, reportes ni ajustes.</p>
+        <div id="a-users" class="list"></div>
+      </section>
       <section class="card">
         <h3>Tienda</h3>
         <label>Nombre de la tienda (sale en las etiquetas)<input id="a-store" value="${esc(ui.draft.storeName)}"></label>
@@ -936,18 +977,11 @@ VIEWS.ajustes = {
         <h3>Canales de venta</h3><div id="a-chan"></div>
       </section>
       <div class="save-bar"><p id="a-err" class="err-text"></p><button class="btn primary lg" id="a-save">Guardar cambios</button></div>
-      <section class="card">
-        <h3>Mi usuario</h3>
-        <p>${esc(u.name || '')} ${u.email ? `<span class="muted">(usuario: ${esc(u.email.replace(/@booho\.app$/, ''))})</span>` : ''}</p>
-        <div class="row-btns">
-          <button class="btn" id="a-rename">Cambiar mi nombre</button>
-          <button class="btn danger ghost" id="a-logout">Cerrar sesión</button>
-        </div>
-      </section>
+      ${myCard}
       ${isDemo ? `<section class="card"><h3>Modo demo</h3>
         <p class="muted small">Los datos se guardan solo en este dispositivo. Cuando configures Firebase, la app usará la nube y estos datos de prueba no se pasan.</p>
         <button class="btn danger ghost" id="a-reset">Borrar todos los datos de prueba</button></section>` : ''}
-      <p class="muted small center">BOOHO · Registro de Ventas · v1.2</p>`;
+      <p class="muted small center">BOOHO · Registro de Ventas · v1.3</p>`;
     this.drawCats();
     this.drawList('#a-pay', 'paymentMethods', 'Nueva forma de pago');
     this.drawList('#a-chan', 'channels', 'Nuevo canal');
@@ -961,8 +995,28 @@ VIEWS.ajustes = {
     $('#a-rename').addEventListener('click', () => askName());
     $('#a-logout').addEventListener('click', async () => { if (await confirmDialog('¿Cerrar sesión?')) store.logout(); });
     $('#a-reset')?.addEventListener('click', async () => {
-      if (await confirmDialog('¿Borrar <b>todo</b> (prendas, ventas y ajustes) de este dispositivo?', { okText: 'Borrar todo', danger: true })) store.resetDemo();
+      if (await confirmDialog('¿Borrar <b>todo</b> (prendas, ventas, usuarios y ajustes) de este dispositivo?', { okText: 'Borrar todo', danger: true })) store.resetDemo();
     });
+    $('#a-newuser').addEventListener('click', () => openUserForm());
+    $('#a-users').addEventListener('click', (e) => {
+      const r = e.target.closest('[data-user]');
+      if (r) openUserForm(S().users.find((x) => x.uid === r.dataset.user));
+    });
+  },
+  refresh() {
+    const el = $('#a-users');
+    if (!el) return;
+    const me = S().user.uid;
+    const users = S().users.slice().sort((a, b) =>
+      (b.active ? 1 : 0) - (a.active ? 1 : 0) || (a.role === 'duena' ? -1 : 1) - (b.role === 'duena' ? -1 : 1) || (a.name || '').localeCompare(b.name || ''));
+    el.innerHTML = users.map((x) => `
+      <div class="row-item tap" data-user="${esc(x.uid)}">
+        <div class="avatar">${esc((x.name || x.username || '?').trim().charAt(0).toUpperCase())}</div>
+        <div class="grow"><div><b>${esc(x.name || '')}</b>${x.uid === me ? ' <span class="muted small">(tú)</span>' : ''}</div>
+          <small class="muted">usuario: ${esc(x.username || '')}</small></div>
+        ${x.active ? '' : '<span class="badge warn">Desactivado</span>'}
+        <span class="badge ${x.role === 'duena' ? 'ok' : ''}">${esc(ROLES[x.role] || x.role)}</span>
+      </div>`).join('') || '<p class="empty">Sin usuarios.</p>';
   },
   drawCats() {
     const used = new Set(S().items.map((i) => i.categoryId));
@@ -1025,6 +1079,101 @@ VIEWS.ajustes = {
     inp.addEventListener('change', add);
   },
 };
+
+
+function openUserForm(user = null) {
+  const isNew = !user;
+  const isMe = user && user.uid === S().user.uid;
+  const m = openModal(`
+    <div class="modal-head"><h2>${isNew ? 'Nuevo usuario' : esc(user.name)}</h2>
+      <button class="icon-btn" data-close aria-label="Cerrar">${icon('x')}</button></div>
+    <div class="modal-body form">
+      <label>Nombre (aparece en las ventas)<input id="u-name" value="${esc(user?.name || '')}" placeholder="Ej. Juan Pérez"></label>
+      ${isNew
+        ? `<label>Usuario (para entrar)<input id="u-user" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Ej. juan"></label>`
+        : `<p class="muted">Usuario para entrar: <b>${esc(user.username)}</b></p>`}
+      <label>Tipo de usuario<select id="u-role" ${isMe ? 'disabled' : ''}>
+        ${Object.entries(ROLES).map(([k, l]) => `<option value="${k}" ${(user?.role || 'ayudante') === k ? 'selected' : ''}>${l}</option>`).join('')}
+      </select></label>
+      ${isNew ? `
+        <label>Contraseña (mínimo 6)<input id="u-pass" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+      ` : `
+        <div class="pw-box">
+          <div class="field-label">Contraseña</div>
+          <div class="pw-row"><span id="u-pw-show" class="pw-val">••••••</span><button class="btn small" id="u-pw-see">Ver</button></div>
+          <div class="pw-row"><input id="u-pass" placeholder="Nueva contraseña" autocapitalize="off" autocorrect="off" spellcheck="false">
+            <button class="btn small" id="u-pw-set">Cambiar</button></div>
+        </div>
+        ${isMe ? '' : `<label class="check"><input type="checkbox" id="u-active" ${user.active ? 'checked' : ''}> Puede entrar a la app (activo)</label>`}
+      `}
+      <p id="u-err" class="err-text"></p>
+    </div>
+    <div class="modal-actions"><span class="grow"></span>
+      <button class="btn" data-close>Cancelar</button>
+      <button class="btn primary" id="u-save">${isNew ? 'Crear usuario' : 'Guardar'}</button>
+    </div>`);
+  const err = m.querySelector('#u-err');
+  const busy = (b, on) => { b.disabled = on; };
+
+  m.querySelector('#u-pw-see')?.addEventListener('click', async (e) => {
+    busy(e.target, true);
+    try {
+      const pw = await store.getPassword(user.uid);
+      m.querySelector('#u-pw-show').textContent = pw || '(no guardada)';
+    } catch (x) { err.textContent = x.message; }
+    busy(e.target, false);
+  });
+  m.querySelector('#u-pw-set')?.addEventListener('click', async (e) => {
+    const pw = m.querySelector('#u-pass').value;
+    const ve = validatePassword(pw);
+    if (ve) return (err.textContent = ve);
+    err.textContent = '';
+    busy(e.target, true);
+    try {
+      await store.setPassword(user.uid, pw);
+      m.querySelector('#u-pw-show').textContent = pw;
+      m.querySelector('#u-pass').value = '';
+      toast('Contraseña cambiada');
+    } catch (x) { err.textContent = x.message; }
+    busy(e.target, false);
+  });
+  m.querySelector('#u-save').addEventListener('click', async (e) => {
+    err.textContent = '';
+    const name = m.querySelector('#u-name').value.trim();
+    const role = m.querySelector('#u-role').value;
+    if (!name) return (err.textContent = 'Escribe el nombre.');
+    busy(e.target, true);
+    try {
+      if (isNew) {
+        const username = cleanUsername(m.querySelector('#u-user').value);
+        const password = m.querySelector('#u-pass').value;
+        const ve = validateUsername(username) || validatePassword(password);
+        if (ve) { busy(e.target, false); return (err.textContent = ve); }
+        if (S().users.some((x) => x.username === username)) { busy(e.target, false); return (err.textContent = 'Ese nombre de usuario ya existe.'); }
+        await store.createUser({ username, name, role, password });
+        closeModal();
+        openModal(`<div class="modal-body center">
+            <div class="big-check">✓</div><h2>Usuario creado</h2>
+            <p>Para entrar a la app, ${esc(name)} usa:</p>
+            <div class="kv center-kv"><span>Usuario</span><b>${esc(username)}</b><span>Contraseña</span><b>${esc(password)}</b></div>
+          </div><div class="modal-actions"><button class="btn primary lg block" data-close>Listo</button></div>`);
+      } else {
+        const patch = { name };
+        if (!isMe) {
+          patch.role = role;
+          patch.active = m.querySelector('#u-active').checked;
+        }
+        await store.updateUser(user.uid, patch);
+        closeModal();
+        toast('Usuario actualizado');
+      }
+    } catch (x) {
+      err.textContent = x.message || 'No se pudo guardar.';
+      busy(e.target, false);
+    }
+  });
+  setTimeout(() => m.querySelector('#u-name')?.focus(), 50);
+}
 
 async function saveSettings() {
   const d = ui.draft;

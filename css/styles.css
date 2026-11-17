@@ -360,3 +360,16 @@ tr.sub td:first-child { padding-left: 16px; }
 }
 .chart-tip.show { opacity: 1; }
 @media (max-width: 900px) { .chart-grid { grid-template-columns: 1fr; } }
+
+/* ---------- usuarios ---------- */
+.avatar {
+  width: 40px; height: 40px; border-radius: 50%; flex: none;
+  background: var(--accent-soft); color: var(--accent-ink);
+  display: flex; align-items: center; justify-content: center; font-weight: 800;
+}
+.pw-box { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+.pw-row { display: flex; gap: 10px; align-items: center; margin-top: 8px; }
+.pw-row input { flex: 1; }
+.pw-val { flex: 1; font-family: ui-monospace, Menlo, monospace; font-weight: 700; font-size: 1.1rem; }
+.center-kv { display: inline-grid; text-align: left; margin: 8px auto 0; font-size: 1.15rem; }
+.center-kv b { font-family: ui-monospace, Menlo, monospace; }
