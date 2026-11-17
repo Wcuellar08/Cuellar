@@ -665,7 +665,7 @@ function openLabelsModal(preselect = null) {
     if (!items.length) return toast('Selecciona al menos una etiqueta', 'err');
     const entries = items.map((item) => ({ item, title: itemTitle(item, st) }));
     if (ui.labelFormat === 'carta') for (let k = 0; k < skip; k++) entries.unshift({ blank: true });
-    printLabels(entries, ui.labelFormat, st.storeName);
+    printLabels(entries, ui.labelFormat, st.storeName, { pause: () => store.pauseSync(), resume: () => store.resumeSync() });
   });
   m.querySelector('#lb-mark').addEventListener('click', async () => {
     if (!selected.size) return;

@@ -231,6 +231,8 @@ function createLocalStore() {
       db.cortes.push({ ...corte, id: 'c' + Date.now().toString(36) });
       save();
     },
+    async pauseSync() {},
+    async resumeSync() {},
     exportData() { return buildBackup(store.state); },
     async importData(data) {
       ownerOnly();
@@ -528,6 +530,18 @@ async function createFirebaseStore() {
     },
     async saveCorte(corte) {
       fire(F.addDoc(F.collection(db, 'cortes'), corte));
+    },
+    // El iPad no abre la ventana de imprimir mientras haya una conexión abierta
+    // (Firestore mantiene una siempre abierta). Se pausa durante la vista de impresión.
+    async pauseSync() {
+      clearTimeout(store._resumeTimer);
+      await F.disableNetwork(db).catch(() => {});
+      // Por seguridad, se reanuda sola a los 10 minutos
+      store._resumeTimer = setTimeout(() => store.resumeSync(), 10 * 60 * 1000);
+    },
+    async resumeSync() {
+      clearTimeout(store._resumeTimer);
+      await F.enableNetwork(db).catch(() => {});
     },
     exportData() { return buildBackup(store.state); },
     async importData(data, onProgress) {

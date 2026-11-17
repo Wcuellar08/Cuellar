@@ -41,12 +41,14 @@ function doPrint() {
   }
 }
 
+let onCloseHook = null;
+
 /**
- * Muestra la vista de impresión (las etiquetas a tamaño real) y abre la ventana de imprimir.
- * Si el navegador no abre la ventana, la vista se queda con las instrucciones para imprimir
- * desde el menú del navegador.
+ * Muestra la vista de impresión (las etiquetas a tamaño real) con el botón Imprimir.
+ * pause/resume: pausan la conexión con la base de datos mientras está abierta la vista,
+ * porque el iPad tarda en abrir la ventana de imprimir si hay una conexión abierta.
  */
-export function printLabels(entries, format, storeName) {
+export function printLabels(entries, format, storeName, { pause, resume } = {}) {
   const area = document.getElementById('print-area');
   area.className = `fmt-${format}`;
   area.innerHTML = entries
@@ -71,22 +73,29 @@ export function printLabels(entries, format, storeName) {
     <div class="ptb-row">
       <div class="ptb-title"><b>Vista de impresión</b><span>${count} etiqueta${count === 1 ? '' : 's'} · ${esc(LABEL_FORMATS[format].short)}</span></div>
       <button class="btn" id="ptb-close">Cerrar</button>
-      <button class="btn primary lg" id="ptb-print">Imprimir</button>
+      <button class="btn primary lg" id="ptb-print" disabled>Preparando…</button>
     </div>
     <p class="ptb-help">¿No se abrió la ventana de imprimir? Usa el menú del navegador:
       en <b>Safari</b> toca Compartir <span class="ptb-ic">⬆︎</span> → <b>Imprimir</b>;
       en <b>Chrome</b> toca <span class="ptb-ic">⋯</span> → Compartir → <b>Imprimir</b>.
       Si abriste BOOHO desde el ícono de la pantalla de inicio y no sale, ábrela en Safari.</p>`;
-  bar.querySelector('#ptb-print').addEventListener('click', doPrint);
+  const btn = bar.querySelector('#ptb-print');
+  btn.addEventListener('click', doPrint);
   bar.querySelector('#ptb-close').addEventListener('click', closePrintPreview);
   document.body.classList.add('printing');
   area.style.top = bar.offsetHeight + 'px';
   area.scrollTop = 0;
-  // Se llama en el mismo toque del botón "Imprimir" de la ventana de etiquetas
-  doPrint();
+  onCloseHook = resume || null;
+  Promise.resolve(pause?.()).finally(() => {
+    btn.disabled = false;
+    btn.textContent = 'Imprimir';
+  });
 }
 
 export function closePrintPreview() {
+  const hook = onCloseHook;
+  onCloseHook = null;
+  hook?.();
   document.body.classList.remove('printing');
   const area = document.getElementById('print-area');
   if (area) area.innerHTML = '';
