@@ -25,7 +25,7 @@ const ui = {
   sellQ: '',
   inv: { q: '', status: 'disponible', cat: '' },
   salesQ: '',
-  rep: { preset: 'mes', from: '', to: '' },
+  rep: { preset: 'mes', from: '', to: '', group: lsGet('ui.repGroup', 'cat') },
   labelFormat: lsGet('ui.labelFormat', 'carta'),
   itemDefaults: {},
   draft: null,
@@ -742,6 +742,87 @@ function presetRange(p) {
 }
 const PRESETS = [['hoy', 'Hoy'], ['ayer', 'Ayer'], ['semana', 'Esta semana'], ['mes', 'Este mes'], ['mespasado', 'Mes pasado'], ['anio', 'Este año']];
 
+// ------------------------------------------------------------------ gráficos de barras
+/** Agrupa filas por categoría o subcategoría: [{name, count, amount}] ordenado de mayor a menor. */
+function groupCount(rows, group, keyFn, amountFn) {
+  const m = new Map();
+  rows.forEach((r) => {
+    const [cat, sub] = keyFn(r);
+    const name = group === 'sub' ? `${cat} › ${sub || 'Sin subcategoría'}` : cat;
+    const g = m.get(name) || { name, count: 0, amount: 0 };
+    g.count++;
+    g.amount += amountFn(r);
+    m.set(name, g);
+  });
+  return [...m.values()].sort((a, b) => b.count - a.count || b.amount - a.amount);
+}
+
+function hbarChart(title, subtitle, data, countWord, amountWord, emptyMsg) {
+  const MAX = 10;
+  let rows = data;
+  if (data.length > MAX) {
+    const rest = data.slice(MAX - 1);
+    rows = [...data.slice(0, MAX - 1), {
+      name: `Otras (${rest.length})`, count: rest.reduce((a, x) => a + x.count, 0),
+      amount: rest.reduce((a, x) => a + x.amount, 0), other: true,
+    }];
+  }
+  const total = data.reduce((a, x) => a + x.count, 0);
+  const max = Math.max(1, ...rows.map((x) => x.count));
+  const body = rows.length ? `<div class="hbar" role="list">${rows.map((x) => {
+    const pctTxt = total ? Math.round((x.count / total) * 100) + '%' : '0%';
+    const tip = `<b>${esc(x.name)}</b><br>${x.count} prenda${x.count === 1 ? '' : 's'} ${countWord} (${pctTxt})<br>${money(x.amount)} ${amountWord}`;
+    return `<div class="hbar-row ${x.other ? 'other' : ''}" role="listitem" tabindex="0"
+        aria-label="${esc(x.name)}: ${x.count} ${countWord}, ${pctTxt}" data-tip="${esc(tip)}">
+      <div class="hbar-label">${x.count === max && !x.other ? '<span class="hbar-top">★</span>' : ''}${esc(x.name)}</div>
+      <div class="hbar-track"><div class="hbar-bar" style="width:calc((100% - 40px) * ${(x.count / max).toFixed(4)})"></div><span class="hbar-val">${x.count}</span></div>
+    </div>`;
+  }).join('')}</div>` : `<p class="empty">${emptyMsg}</p>`;
+  return `<section class="card chart-card">
+    <div class="chart-head"><h3>${title}</h3><span class="muted small">${subtitle}${total ? ` · ${total} en total` : ''}</span></div>
+    ${body}
+  </section>`;
+}
+
+/** Tooltip al pasar el dedo / tocar una barra. */
+function bindChartTips(root) {
+  let tip = $('#chart-tip');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.id = 'chart-tip';
+    tip.className = 'chart-tip';
+    document.body.appendChild(tip);
+    document.addEventListener('pointerdown', (e) => { if (!e.target.closest('.hbar-row')) hideTip(); });
+    window.addEventListener('scroll', () => hideTip(), true);
+  }
+  $$('.hbar-row', root).forEach((row) => {
+    row.addEventListener('pointerenter', (e) => e.pointerType === 'mouse' && showTip(row, root));
+    row.addEventListener('pointerleave', (e) => e.pointerType === 'mouse' && hideTip());
+    row.addEventListener('click', () => showTip(row, root));
+    row.addEventListener('focus', () => showTip(row, root));
+    row.addEventListener('blur', () => hideTip());
+  });
+}
+function showTip(row, root) {
+  const tip = $('#chart-tip');
+  $$('.hbar-row.active', root).forEach((r) => r.classList.toggle('active', false));
+  row.classList.toggle('active', true);
+  tip.innerHTML = row.dataset.tip;
+  tip.classList.toggle('show', true);
+  const bar = row.querySelector('.hbar-val').getBoundingClientRect();
+  const t = tip.getBoundingClientRect();
+  let x = bar.right + 12;
+  let y = bar.top + bar.height / 2 - t.height / 2;
+  if (x + t.width > window.innerWidth - 8) { x = window.innerWidth - t.width - 8; y = bar.top - t.height - 10; }
+  tip.style.left = Math.max(8, x) + 'px';
+  tip.style.top = Math.max(8, y) + 'px';
+}
+function hideTip() {
+  const tip = $('#chart-tip');
+  if (tip) tip.classList.toggle('show', false);
+  $$('.hbar-row.active').forEach((r) => r.classList.toggle('active', false));
+}
+
 VIEWS.reportes = {
   mount(v) {
     if (ui.rep.preset !== 'custom') [ui.rep.from, ui.rep.to] = presetRange(ui.rep.preset);
@@ -796,6 +877,21 @@ VIEWS.reportes = {
         ${kpi('Ticket promedio', money(k.avgTicket), `Descuentos ${money(k.discounts)}${k.returns ? ` · ${k.returns} devol.` : ''}`)}
         ${kpi('Inventario disponible', `${k.invCount} prendas`, `Valor ${money(k.invValue)} · costo ${money(k.invCost)}`)}
       </div>
+      <div class="chart-filter">
+        <span class="muted small">Gráficos por</span>
+        <div class="chips" id="r-group">
+          <button class="chip ${ui.rep.group === 'cat' ? 'on' : ''}" data-g="cat">Categoría</button>
+          <button class="chip ${ui.rep.group === 'sub' ? 'on' : ''}" data-g="sub">Subcategoría</button>
+        </div>
+      </div>
+      <div class="chart-grid">
+        ${hbarChart('Lo que más vendes', `Prendas vendidas del ${fmtDate(ui.rep.from + 'T12:00:00')} al ${fmtDate(ui.rep.to + 'T12:00:00')}`,
+          groupCount(r.lines, ui.rep.group, (l) => [l.category, l.subcategory], (l) => l.finalPrice), 'vendidas', 'en ventas',
+          'Aún no hay ventas en este periodo.')}
+        ${hbarChart('Lo que más tienes en inventario', 'Prendas disponibles hoy',
+          groupCount(r.inventory, ui.rep.group, (i) => [i.categoryName, i.subcategory], (i) => i.price || 0), 'disponibles', 'a precio de venta',
+          'No hay prendas disponibles.')}
+      </div>
       <div class="rep-grid">
         ${table('Por categoría', ['Categoría', 'Prendas', 'Ventas', 'Ganancia'], r.byCat.flatMap((c) => [
           `<tr class="strong"><td>${esc(c.name)}</td><td class="num">${c.items}</td><td class="num">${money(c.total)}</td><td class="num">${money(c.profit)}</td></tr>`,
@@ -808,6 +904,14 @@ VIEWS.reportes = {
         ${table('Por día', ['Fecha', 'Tickets', 'Ventas', 'Ganancia'], r.byDay.slice().reverse().map((x) => `<tr><td>${fmtDate(x.day + 'T12:00:00')}</td><td class="num">${x.tickets}</td><td class="num">${money(x.total)}</td><td class="num">${money(x.profit)}</td></tr>`))}
         ${table('Más tiempo sin venderse', ['Prenda', 'Días', 'Precio'], r.inventory.slice(0, 15).map((i) => `<tr><td><span class="code">${esc(i.code)}</span> ${esc(i.title)}</td><td class="num">${i.days}</td><td class="num">${money(i.price)}</td></tr>`))}
       </div>`;
+    $('#r-group').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-g]');
+      if (!b) return;
+      ui.rep.group = b.dataset.g;
+      lsSet('ui.repGroup', ui.rep.group);
+      this.refresh();
+    });
+    bindChartTips($('#r-body'));
   },
 };
 
@@ -843,7 +947,7 @@ VIEWS.ajustes = {
       ${isDemo ? `<section class="card"><h3>Modo demo</h3>
         <p class="muted small">Los datos se guardan solo en este dispositivo. Cuando configures Firebase, la app usará la nube y estos datos de prueba no se pasan.</p>
         <button class="btn danger ghost" id="a-reset">Borrar todos los datos de prueba</button></section>` : ''}
-      <p class="muted small center">BOOHO · Registro de Ventas · v1.1</p>`;
+      <p class="muted small center">BOOHO · Registro de Ventas · v1.2</p>`;
     this.drawCats();
     this.drawList('#a-pay', 'paymentMethods', 'Nueva forma de pago');
     this.drawList('#a-chan', 'channels', 'Nuevo canal');
