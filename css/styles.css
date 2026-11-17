@@ -500,3 +500,28 @@ h3.mt { margin-top: 18px; }
 .bk-status { font-size: .85rem; color: var(--muted); }
 .bk-status.warn { color: var(--warn); font-weight: 700; }
 @media (max-width: 560px) { .backup-opts { grid-template-columns: 1fr; } }
+
+/* ---------- redes y notificaciones ---------- */
+.pubs { display: inline-flex; gap: 4px; flex: none; }
+.pub {
+  font: inherit; font-size: 11px; font-weight: 800; letter-spacing: .02em;
+  min-width: 34px; height: 30px; padding: 0 6px; border-radius: 8px; cursor: pointer;
+  border: 1px dashed #b7c3cf; background: transparent; color: #8a98a6;
+}
+.pub.on { border: 1px solid var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
+.pub-chip.on::before { content: '✓ '; }
+.bell {
+  position: relative; width: 44px; height: 40px; border: none; background: transparent; color: var(--muted);
+  display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; cursor: pointer;
+}
+.bell .ic { width: 24px; height: 24px; }
+.bell.has { color: var(--accent-ink); }
+.bell:active { background: var(--accent-soft); }
+.bell-n {
+  position: absolute; top: 2px; right: 2px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
+  background: var(--danger); color: #fff; font-size: 11px; font-weight: 800; line-height: 18px; text-align: center;
+}
+.notif-row { align-items: flex-start; }
+.notif-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.social-remind { text-align: left; margin-top: 12px; }
+.social-remind .ic { flex: none; }

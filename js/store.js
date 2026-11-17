@@ -220,7 +220,7 @@ function createLocalStore() {
       }
       s.items.forEach((li) => {
         const it = db.items.find((i) => i.id === li.itemId);
-        Object.assign(it, { status: 'vendido', soldAt: s.date, saleId: s.id, soldPrice: li.finalPrice });
+        Object.assign(it, { status: 'vendido', soldAt: s.date, saleId: s.id, soldPrice: li.finalPrice, pendingUnpublish: [...(it.publishedOn || [])] });
       });
       db.sales.push(s);
       save();
@@ -235,7 +235,7 @@ function createLocalStore() {
       li.returnedBy = store.state.user?.name || '';
       li.returnedByUid = store.state.user?.uid || '';
       const it = db.items.find((i) => i.id === itemId);
-      if (it) Object.assign(it, { status: 'disponible', soldAt: null, saleId: null, soldPrice: null });
+      if (it) Object.assign(it, { status: 'disponible', soldAt: null, saleId: null, soldPrice: null, pendingUnpublish: [] });
       save();
     },
     async saveSettings(settings) {
@@ -550,6 +550,8 @@ async function createFirebaseStore() {
       sale.items.forEach((li) =>
         b.update(F.doc(db, 'items', li.itemId), {
           status: 'vendido', soldAt: sale.date, saleId: saleRef.id, soldPrice: li.finalPrice,
+          // Redes donde hay que marcarla como vendida (aviso en la campanita)
+          pendingUnpublish: [...(store.getItem(li.itemId)?.publishedOn || [])],
         })
       );
       // No se espera la confirmación del servidor: así funciona sin internet
@@ -567,7 +569,7 @@ async function createFirebaseStore() {
       );
       const b = F.writeBatch(db);
       b.update(F.doc(db, 'sales', saleId), { items });
-      b.update(F.doc(db, 'items', itemId), { status: 'disponible', soldAt: null, saleId: null, soldPrice: null });
+      b.update(F.doc(db, 'items', itemId), { status: 'disponible', soldAt: null, saleId: null, soldPrice: null, pendingUnpublish: [] });
       fire(b.commit());
     },
     async saveSettings(settings) {

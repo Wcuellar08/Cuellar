@@ -8,6 +8,8 @@ App para iPad, que se abre en Safari, para llevar el inventario, registrar venta
   El consecutivo es uno solo para toda la tienda.
 - **Fotos**: al registrar una prenda la app pide una foto (cámara o galería). Se achica en el iPad y se guarda
   en la base de datos (sin costo extra). La miniatura sale en las listas; al tocarla se ve en grande.
+- **Redes (Instagram, Vitrinnea…)**: en cada prenda se marca dónde está publicada. Al venderla, la campanita 🔔
+  recuerda marcarla como vendida en esas redes. La lista de redes se cambia en Ajustes.
 - **Etiquetas con QR**: se imprimen en hoja carta (30 por hoja, tipo Avery 5160) o en una impresora de etiquetas (50×30, 40×30 o 58×40 mm).
 - **Vender**: escaneas el QR con la cámara del iPad o buscas la prenda, y armas un carrito con varias prendas.
   También registra el precio final de cada prenda, el descuento general, la forma de pago, el canal y el cliente.

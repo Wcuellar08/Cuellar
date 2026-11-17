@@ -36,6 +36,7 @@ const ui = {
 // ------------------------------------------------------------------ iconos
 const ICONS = {
   home: '<path d="M3 11 12 4l9 7"/><path d="M5 10v10h5v-6h4v6h5V10"/>',
+  bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
   sell: '<path d="M3 3h2l2.4 12.2a2 2 0 0 0 2 1.8h7.7a2 2 0 0 0 2-1.6L21 8H6"/><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/>',
   box: '<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>',
   receipt: '<path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z"/><path d="M9 8h6M9 12h6"/>',
@@ -59,6 +60,26 @@ const TABS = [
 ];
 const isOwner = () => store.isOwner();
 const visibleTabs = () => TABS.filter((t) => t[3] !== 'owner' || isOwner());
+
+// ------------------------------------------------------------------ redes (Instagram, Vitrinnea…)
+const platforms = () => S().settings.platforms || [];
+function platAbbr(p) {
+  const n = normalize(p);
+  if (n.includes('instagram')) return 'IG';
+  if (n.includes('facebook')) return 'FB';
+  if (n.includes('tiktok')) return 'TT';
+  if (n.includes('vitrin')) return 'VI';
+  return p.slice(0, 2).toUpperCase();
+}
+/** Indicadores de dónde está publicada (tocarlos marca/desmarca). */
+function pubBadges(it) {
+  const on = it.publishedOn || [];
+  return platforms().map((p) => `<button type="button" class="pub ${on.includes(p) ? 'on' : ''}" data-pub="${esc(it.id)}" data-plat="${esc(p)}"
+    title="${esc(p)}${on.includes(p) ? ' (publicada)' : ' (sin publicar)'}">${esc(platAbbr(p))}</button>`).join('');
+}
+const pendingSocial = () => S().items
+  .filter((i) => i.status === 'vendido' && (i.pendingUnpublish || []).length)
+  .sort((a, b) => (b.soldAt || '').localeCompare(a.soldAt || ''));
 
 /** Miniatura de la prenda (tocarla abre la foto grande). */
 function thumbHtml(it) {
@@ -126,7 +147,8 @@ function renderApp() {
     <header class="topbar">
       <div class="brand" id="brand" role="button" tabindex="0" title="Inicio">${icon('tag')}<span id="store-name">${esc(S().settings.storeName)}</span>
         ${isDemo ? '<span class="badge warn">Modo demo</span>' : ''}</div>
-      <div class="top-right"><span id="net" class="net"></span><span class="who">${esc(user.name || user.username || '')}${isOwner() ? '' : ' · Ayudante'}</span></div>
+      <div class="top-right"><span id="net" class="net"></span>
+        <button class="bell" id="bell" aria-label="Notificaciones">${icon('bell')}<span class="bell-n" id="bell-n"></span></button><span class="who">${esc(user.name || user.username || '')}${isOwner() ? '' : ' · Ayudante'}</span></div>
     </header>
     <main id="view"></main>
     <nav class="tabbar">${visibleTabs().map(([id, label, ic]) =>
@@ -134,6 +156,8 @@ function renderApp() {
     </nav>`;
   $$('.tabbar button').forEach((b) => b.addEventListener('click', () => switchTab(b.dataset.tab)));
   $('#brand').addEventListener('click', () => switchTab('inicio'));
+  $('#bell').addEventListener('click', () => openNotifications());
+  updateBell();
   updateNetBadge();
   mountView();
   if (!user.name && isOwner()) askName();
@@ -173,6 +197,8 @@ function refreshView() {
   if (!S().user || !$('#view')) return;
   const sn = $('#store-name');
   if (sn) sn.textContent = S().settings.storeName;
+  updateBell();
+  if ($('#notif-list')) drawNotifications();
   VIEWS[ui.tab].refresh?.();
 }
 
@@ -265,6 +291,8 @@ function homeAlerts() {
   const alerts = [];
   const pending = S().items.filter((i) => i.status === 'disponible' && !i.labelPrinted).length;
   if (pending) alerts.push({ act: 'labels', tone: 'warn', text: `${pending} prenda${pending === 1 ? '' : 's'} sin etiqueta impresa`, cta: 'Imprimir' });
+  const soc = pendingSocial().length;
+  if (soc) alerts.push({ act: 'notif', tone: 'warn', text: `${soc} prenda${soc === 1 ? '' : 's'} vendida${soc === 1 ? '' : 's'} por marcar en tus redes`, cta: 'Ver' });
   const y = new Date(); y.setDate(y.getDate() - 1);
   const yk = dayKey(y);
   const ySales = S().sales.filter((s) => dayKey(s.date) === yk && (owner || s.sellerUid === me.uid));
@@ -307,6 +335,7 @@ VIEWS.inicio = {
     else if (act === 'backup') switchTab('ajustes');
     else if (act === 'old') { ui.rep.preset = 'mes'; switchTab('reportes'); setTimeout(() => $$('#r-body h3').find((h) => h.textContent.startsWith('Más tiempo'))?.scrollIntoView({ block: 'start' }), 100); }
     else if (act === 'ventas') switchTab('ventas');
+    else if (act === 'notif') openNotifications();
     else if (act === 'reportes') switchTab('reportes');
   },
   refresh() {
@@ -606,6 +635,9 @@ async function checkout() {
     customerName: ui.customer.name.trim(), customerPhone: ui.customer.phone.trim(),
     sellerUid: S().user.uid, sellerName: S().user.name || S().user.username || '',
   };
+  // Redes donde estaban publicadas las prendas vendidas
+  const toUnpublish = new Map();
+  lines.forEach((l) => (store.getItem(l.itemId)?.publishedOn || []).forEach((p) => toUnpublish.set(p, (toUnpublish.get(p) || 0) + 1)));
   try {
     await store.createSale(sale);
   } catch (e) {
@@ -613,12 +645,16 @@ async function checkout() {
   }
   resetCart();
   mountView();
+  updateBell();
   openModal(`
     <div class="modal-body center">
       <div class="big-check">✓</div>
       <h2>Venta registrada</h2>
       <p class="muted">Ticket ${esc(folio)}</p>
       <p class="big-money">${money(sale.total)}</p>
+      ${toUnpublish.size ? `<div class="alert info social-remind">${icon('bell')}<span class="grow">Recuerda marcar como vendida en
+        <b>${[...toUnpublish.entries()].map(([p, n]) => `${esc(p)}${lines.length > 1 ? ` (${n})` : ''}`).join(' y ')}</b>.
+        Te queda en la campanita de arriba.</span></div>` : ''}
     </div>
     <div class="modal-actions"><button class="btn primary lg block" data-close>Nueva venta</button></div>`);
 }
@@ -635,7 +671,9 @@ VIEWS.inventario = {
       <div class="filters">
         <input id="inv-q" type="search" placeholder="Buscar código, descripción, marca…" value="${esc(ui.inv.q)}">
         <select id="inv-status">
-          <option value="disponible">Disponibles</option><option value="vendido">Vendidas</option><option value="todas">Todas</option>
+          <option value="disponible">Disponibles</option>
+          ${platforms().length ? '<option value="sinpub">Disponibles sin publicar</option>' : ''}
+          <option value="vendido">Vendidas</option><option value="todas">Todas</option>
         </select>
         <select id="inv-cat"><option value="">Todas las categorías</option>
           ${st.categories.map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select>
@@ -650,6 +688,19 @@ VIEWS.inventario = {
     $('#inv-new').addEventListener('click', () => openItemForm());
     $('#inv-labels').addEventListener('click', () => openLabelsModal());
     $('#inv-list').addEventListener('click', (e) => {
+      const pb = e.target.closest('[data-pub]');
+      if (pb) {
+        // Marcar / desmarcar publicada sin abrir la prenda
+        const it = store.getItem(pb.dataset.pub);
+        const on = new Set(it.publishedOn || []);
+        const p = pb.dataset.plat;
+        on.has(p) ? on.delete(p) : on.add(p);
+        store.updateItem(it.id, { publishedOn: [...on] });
+        toast(`${it.code}: ${on.has(p) ? 'publicada' : 'sin publicar'} en ${p}`);
+        pb.blur(); // si el botón queda enfocado, la lista no se redibuja
+        setTimeout(() => this.refresh(true), 30);
+        return;
+      }
       const r = e.target.closest('[data-item]');
       if (r) openItemForm(store.getItem(r.dataset.item));
     });
@@ -659,7 +710,8 @@ VIEWS.inventario = {
     const q = normalize(ui.inv.q);
     const terms = q ? q.split(/\s+/) : [];
     const list = S().items
-      .filter((i) => ui.inv.status === 'todas' || i.status === ui.inv.status)
+      .filter((i) => ui.inv.status === 'todas'
+        || (ui.inv.status === 'sinpub' ? i.status === 'disponible' && platforms().some((p) => !(i.publishedOn || []).includes(p)) : i.status === ui.inv.status))
       .filter((i) => !ui.inv.cat || i.categoryId === ui.inv.cat)
       .filter((i) => { if (!terms.length) return true; const t = itemSearchText(i, st); return terms.every((x) => t.includes(x)); })
       .sort((a, b) => (b.number || 0) - (a.number || 0));
@@ -674,6 +726,7 @@ VIEWS.inventario = {
         <div class="grow"><div><span class="code">${esc(it.code)}</span> ${esc(itemTitle(it, st))}</div>
           <small class="muted">${esc(catName(st, it.categoryId))}${it.subcategory ? ' › ' + esc(it.subcategory) : ''}${itemMeta(it) ? ' · ' + esc(itemMeta(it)) : ''}</small></div>
         ${it.status === 'vendido' ? `<span class="badge">Vendida ${fmtDate(it.soldAt)}</span>` : (!it.labelPrinted ? '<span class="badge warn">Sin etiqueta</span>' : '')}
+        ${it.status === 'disponible' ? `<span class="pubs">${pubBadges(it)}</span>` : ''}
         <div class="price">${money(it.price)}</div>
       </div>`).join('')
       : `<p class="empty">${S().items.length ? 'No hay prendas con estos filtros.' : 'Aún no hay prendas. Toca “Nueva prenda” para empezar.'}</p>`;
@@ -701,6 +754,9 @@ function openItemForm(item = null) {
           <p class="muted small" id="f-photo-msg"></p>
         </div>
       </div>
+      ${platforms().length ? `
+        <div class="field-label">¿Dónde está publicada?</div>
+        <div class="chips" id="f-pub">${platforms().map((p) => `<button type="button" class="chip pub-chip ${(d.publishedOn || []).includes(p) ? 'on' : ''}" data-p="${esc(p)}">${esc(p)}</button>`).join('')}</div>` : ''}
       ${!isNew ? `<p class="muted small">Ingresada ${fmtDateTime(item.createdAt)}${item.createdBy ? ' por ' + esc(item.createdBy) : ''}${sold ? ` · <b>Vendida ${fmtDateTime(item.soldAt)}</b> en ${money(item.soldPrice)}` : ''}</p>` : ''}
       <div class="grid2">
         <label>Categoría *<select id="f-cat"><option value="">Elegir…</option>
@@ -743,6 +799,11 @@ function openItemForm(item = null) {
   };
   fillSubs();
   m.querySelector('#f-cat').addEventListener('change', () => { d.subcategory = ''; fillSubs(); });
+
+  m.querySelector('#f-pub')?.addEventListener('click', (e) => {
+    const c = e.target.closest('[data-p]');
+    if (c) c.classList.toggle('on');
+  });
 
   // --- foto
   const photo = { thumb: item?.thumb || '', full: null, changed: false, removed: false };
@@ -789,6 +850,7 @@ function openItemForm(item = null) {
       size: val('#f-size'), brand: val('#f-brand'), color: val('#f-color'), condition: val('#f-cond'),
       gender: val('#f-gender'), price: round2(parseNum(val('#f-price'))),
     };
+    if (m.querySelector('#f-pub')) data.publishedOn = $$('#f-pub .chip.on', m).map((c) => c.dataset.p);
     if (isOwner()) data.cost = round2(parseNum(val('#f-cost')));
     else if (isNew) data.cost = 0;
     const err = m.querySelector('#f-err');
@@ -997,6 +1059,56 @@ function openSaleDetail(id) {
       setTimeout(() => openSaleDetail(s.id), 50);
     }
   });
+}
+
+// =================================================================== NOTIFICACIONES
+function updateBell() {
+  const n = pendingSocial().reduce((a, i) => a + i.pendingUnpublish.length, 0);
+  const el = $('#bell-n');
+  if (!el) return;
+  el.textContent = n > 99 ? '99+' : n;
+  el.style.display = n ? '' : 'none';
+  $('#bell')?.classList.toggle('has', n > 0);
+}
+
+function openNotifications() {
+  openModal(`
+    <div class="modal-head"><h2>Notificaciones</h2><button class="icon-btn" data-close aria-label="Cerrar">${icon('x')}</button></div>
+    <div class="modal-body">
+      <p class="muted small">Prendas vendidas que siguen publicadas. Márcalas como vendidas en cada red y toca el botón para quitarlas de aquí.</p>
+      <div id="notif-list" class="list"></div>
+    </div>`, { wide: true });
+  $('#notif-list').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-done]');
+    if (!b) return;
+    const it = store.getItem(b.dataset.done);
+    if (!it) return;
+    const plats = b.dataset.plat ? [b.dataset.plat] : [...(it.pendingUnpublish || [])];
+    store.updateItem(it.id, {
+      pendingUnpublish: (it.pendingUnpublish || []).filter((p) => !plats.includes(p)),
+      publishedOn: (it.publishedOn || []).filter((p) => !plats.includes(p)),
+    });
+    setTimeout(() => { drawNotifications(); updateBell(); }, 30);
+  });
+  drawNotifications();
+}
+
+function drawNotifications() {
+  const el = $('#notif-list');
+  if (!el) return;
+  const st = S().settings;
+  const list = pendingSocial();
+  el.innerHTML = list.length ? list.map((it) => `
+    <div class="row-item notif-row">
+      ${thumbHtml(it)}
+      <div class="grow"><div><span class="code">${esc(it.code)}</span> ${esc(itemTitle(it, st))}</div>
+        <small class="muted">Vendida ${fmtDate(it.soldAt)} en ${money(it.soldPrice)}</small>
+        <div class="notif-actions">
+          ${it.pendingUnpublish.map((p) => `<button class="btn small" data-done="${esc(it.id)}" data-plat="${esc(p)}">✓ Ya la marqué en ${esc(p)}</button>`).join('')}
+          ${it.pendingUnpublish.length > 1 ? `<button class="btn small ghost" data-done="${esc(it.id)}">Todas listas</button>` : ''}
+        </div>
+      </div>
+    </div>`).join('') : '<p class="empty">✓ No tienes pendientes. Todo lo vendido ya está marcado en tus redes.</p>';
 }
 
 // =================================================================== CORTE DE CAJA
@@ -1498,7 +1610,7 @@ VIEWS.ajustes = {
         ${isOwner() ? '' : '<p class="muted small">Para cambiar tu contraseña o tu nombre, pídeselo a la dueña.</p>'}
       </section>`;
     if (!isOwner()) {
-      v.innerHTML = myCard + '<p class="muted small center">BOOHO · Registro de Ventas · v1.5</p>';
+      v.innerHTML = myCard + '<p class="muted small center">BOOHO · Registro de Ventas · v1.6</p>';
       $('#a-logout').addEventListener('click', async () => { if (await confirmDialog('¿Cerrar sesión?')) store.logout(); });
       return;
     }
@@ -1539,6 +1651,9 @@ VIEWS.ajustes = {
         <button class="btn" id="a-addcat">${icon('plus')} Nueva categoría</button>
       </section>
       <section class="card">
+        <h3>Dónde publicas tus prendas</h3>
+        <p class="muted small">Al registrar una prenda marcas dónde está publicada. Cuando se vende, la campanita te recuerda marcarla como vendida ahí.</p>
+        <div id="a-plat"></div>
         <h3>Formas de pago</h3><div id="a-pay"></div>
         <h3>Canales de venta</h3><div id="a-chan"></div>
       </section>
@@ -1547,10 +1662,12 @@ VIEWS.ajustes = {
       ${isDemo ? `<section class="card"><h3>Modo demo</h3>
         <p class="muted small">Los datos se guardan solo en este dispositivo. Cuando configures Firebase, la app usará la nube y estos datos de prueba no se pasan.</p>
         <button class="btn danger ghost" id="a-reset">Borrar todos los datos de prueba</button></section>` : ''}
-      <p class="muted small center">BOOHO · Registro de Ventas · v1.5</p>`;
+      <p class="muted small center">BOOHO · Registro de Ventas · v1.6</p>`;
     this.drawCats();
     this.drawList('#a-pay', 'paymentMethods', 'Nueva forma de pago');
     this.drawList('#a-chan', 'channels', 'Nuevo canal');
+    ui.draft.platforms ||= [];
+    this.drawList('#a-plat', 'platforms', 'Nueva red o página');
     $('#a-store').addEventListener('input', (e) => (ui.draft.storeName = e.target.value));
     $('#a-addcat').addEventListener('click', () => {
       ui.draft.categories.push({ id: uid(), name: '', prefix: '', subs: [] });

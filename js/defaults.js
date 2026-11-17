@@ -21,6 +21,8 @@ export const DEFAULT_SETTINGS = {
     cat('accesorios', 'Accesorios', 'ACC', ['Cinturones', 'Gorras', 'Bufandas', 'Bisutería']),
   ],
   paymentMethods: ['Efectivo', 'Transferencia', 'Tarjeta'],
+  // Dónde se publican las prendas (para recordar marcarlas como vendidas)
+  platforms: ['Instagram', 'Vitrinnea'],
   channels: ['Tienda', 'Bazar', 'Facebook', 'Instagram', 'WhatsApp'],
 };
 
