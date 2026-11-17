@@ -104,6 +104,14 @@ export function exportReport(report, storeName) {
     Costo: i.cost || 0, Precio: i.price || 0, 'Fecha ingreso': d(i.createdAt), 'Días en inventario': i.days,
   })), { money: ['Costo', 'Precio'], widths: [11] }), 'Inventario');
 
+  // --- Cortes de caja ---
+  XLSX.utils.book_append_sheet(wb, sheet((report.cortes || []).map((k) => ({
+    'Día': new Date(k.day + 'T12:00:00'), Hora: time(k.createdAt), Vendedor: k.sellerName, 'Hecho por': k.createdBy,
+    Tickets: k.tickets, Ventas: k.totalSales, Devoluciones: k.totalReturns, Neto: k.totalNet,
+    'Fondo inicial': k.fondo ?? '', 'Efectivo esperado': k.cashExpected ?? '', 'Efectivo contado': k.cashCounted ?? '',
+    Diferencia: k.difference ?? '', Notas: k.notes || '',
+  })), { money: ['Ventas', 'Devoluciones', 'Neto', 'Fondo inicial', 'Efectivo esperado', 'Efectivo contado', 'Diferencia'], widths: [12, 8] }), 'Cortes de caja');
+
   const file = `Reporte_${report.from}_a_${report.to}.xlsx`;
   XLSX.writeFile(wb, file);
   return file;

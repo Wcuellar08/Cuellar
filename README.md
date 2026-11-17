@@ -20,6 +20,11 @@ App para iPad, que se abre en Safari, para llevar el inventario, registrar venta
   - Por forma de pago
   - Por canal
   - Inventario
+  - Cortes de caja
+- **Corte de caja** (en Ventas): por día y por vendedor muestra lo cobrado y lo devuelto por cada forma de pago.
+  Con el fondo inicial calcula cuánto efectivo debe haber y dice si sobra o falta. Los cortes se guardan.
+- **Respaldo** (en Ajustes, solo la dueña): descarga un archivo con todo, que se puede guardar en iCloud Drive.
+  Con ese archivo se puede restaurar lo que se haya borrado o cambiado.
 - **Usuarios**: cada quien entra con un nombre de usuario y contraseña, y queda registrado quién vendió.
   La primera vez, la app pide crear el usuario de la **dueña**. Desde **Ajustes › Usuarios** la dueña:
   - crea usuarios;

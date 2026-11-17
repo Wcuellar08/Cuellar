@@ -49,12 +49,31 @@ const authError = (e) => {
   return e instanceof Error ? e : new Error(String(e));
 };
 
+export const BACKUP_VERSION = 1;
+
+/** Revisa que un archivo de respaldo tenga el formato correcto. */
+export function checkBackup(data) {
+  if (!data || data.app !== 'booho-ventas' || !Array.isArray(data.items) || !Array.isArray(data.sales)) {
+    throw new Error('Este archivo no es un respaldo de BOOHO.');
+  }
+  return data;
+}
+
+function buildBackup(state) {
+  return {
+    app: 'booho-ventas', version: BACKUP_VERSION, createdAt: new Date().toISOString(),
+    createdBy: state.user?.name || '',
+    settings: state.settings, items: state.items, sales: state.sales, cortes: state.cortes,
+    users: state.users.map(({ uid, username, name, role, active, createdAt }) => ({ uid, username, name, role, active, createdAt })),
+  };
+}
+
 /** Interfaz común */
 function baseStore() {
   const listeners = new Set();
   const authListeners = new Set();
   const store = {
-    state: { settings: mergeSettings(), items: [], sales: [], users: [], user: null, ready: false },
+    state: { settings: mergeSettings(), items: [], sales: [], users: [], cortes: [], user: null, ready: false },
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     onAuth(fn) { authListeners.add(fn); return () => authListeners.delete(fn); },
     emit() { listeners.forEach((f) => f(store.state)); },
@@ -80,6 +99,7 @@ function createLocalStore() {
   try { db = JSON.parse(localStorage.getItem(KEY)) || null; } catch { db = null; }
   if (!db) db = { settings: mergeSettings(), items: [], sales: [], counter: 1 };
   db.users ||= [];
+  db.cortes ||= [];
   delete db.user; // versión anterior
 
   const save = () => {
@@ -92,6 +112,7 @@ function createLocalStore() {
     store.state.items = db.items;
     store.state.sales = db.sales;
     store.state.users = db.users.map(publicUser);
+    store.state.cortes = db.cortes;
     store.state.ready = true;
     store.emit();
   };
@@ -196,6 +217,7 @@ function createLocalStore() {
       li.returned = true;
       li.returnedAt = new Date().toISOString();
       li.returnedBy = store.state.user?.name || '';
+      li.returnedByUid = store.state.user?.uid || '';
       const it = db.items.find((i) => i.id === itemId);
       if (it) Object.assign(it, { status: 'disponible', soldAt: null, saleId: null, soldPrice: null });
       save();
@@ -203,6 +225,25 @@ function createLocalStore() {
     async saveSettings(settings) {
       ownerOnly();
       db.settings = settings;
+      save();
+    },
+    async saveCorte(corte) {
+      db.cortes.push({ ...corte, id: 'c' + Date.now().toString(36) });
+      save();
+    },
+    exportData() { return buildBackup(store.state); },
+    async importData(data) {
+      ownerOnly();
+      checkBackup(data);
+      const byId = (arr) => new Map(arr.map((x) => [x.id, x]));
+      const items = byId(db.items); data.items.forEach((x) => items.set(x.id, x));
+      const sales = byId(db.sales); data.sales.forEach((x) => sales.set(x.id, x));
+      const cortes = byId(db.cortes); (data.cortes || []).forEach((x) => cortes.set(x.id, x));
+      db.items = [...items.values()];
+      db.sales = [...sales.values()];
+      db.cortes = [...cortes.values()];
+      if (data.settings) db.settings = data.settings;
+      db.counter = Math.max(db.counter, ...db.items.map((i) => (i.number || 0) + 1));
       save();
     },
     async resetDemo() {
@@ -286,6 +327,10 @@ async function createFirebaseStore() {
     unsubs.push(F.onSnapshot(F.collection(db, 'sales'), (snap) => {
       store.state.sales = snap.docs.map((d) => ({ ...d.data(), id: d.id }));
       markReady('sales');
+    }, (e) => console.error(e)));
+    unsubs.push(F.onSnapshot(F.collection(db, 'cortes'), (snap) => {
+      store.state.cortes = snap.docs.map((d) => ({ ...d.data(), id: d.id }));
+      store.emit();
     }, (e) => console.error(e)));
     unsubs.push(F.onSnapshot(F.collection(db, 'users'), (snap) => {
       store.state.users = snap.docs.map((d) => ({ ...d.data(), uid: d.id }));
@@ -469,7 +514,7 @@ async function createFirebaseStore() {
       if (!s) return;
       const items = s.items.map((li) =>
         li.itemId === itemId && !li.returned
-          ? { ...li, returned: true, returnedAt: new Date().toISOString(), returnedBy: store.state.user?.name || '' }
+          ? { ...li, returned: true, returnedAt: new Date().toISOString(), returnedBy: store.state.user?.name || '', returnedByUid: store.state.user?.uid || '' }
           : li
       );
       const b = F.writeBatch(db);
@@ -480,6 +525,33 @@ async function createFirebaseStore() {
     async saveSettings(settings) {
       ownerOnly();
       fire(F.setDoc(F.doc(db, 'settings', 'main'), settings));
+    },
+    async saveCorte(corte) {
+      fire(F.addDoc(F.collection(db, 'cortes'), corte));
+    },
+    exportData() { return buildBackup(store.state); },
+    async importData(data, onProgress) {
+      ownerOnly();
+      checkBackup(data);
+      if (!navigator.onLine) throw new Error('Se necesita internet para restaurar un respaldo.');
+      const strip = ({ id, ...rest }) => rest;
+      const ops = [
+        ...data.items.map((x) => [F.doc(db, 'items', x.id), strip(x)]),
+        ...data.sales.map((x) => [F.doc(db, 'sales', x.id), strip(x)]),
+        ...(data.cortes || []).map((x) => [F.doc(db, 'cortes', x.id), strip(x)]),
+      ];
+      if (data.settings) ops.push([F.doc(db, 'settings', 'main'), data.settings]);
+      const maxNum = Math.max(0, ...store.state.items.map((i) => i.number || 0), ...data.items.map((i) => i.number || 0));
+      const counter = await F.getDoc(F.doc(db, 'counters', 'items'));
+      const next = Math.max(maxNum + 1, counter.exists() ? counter.data().next : 1);
+      ops.push([F.doc(db, 'counters', 'items'), { next }]);
+      // Firestore acepta hasta 500 cambios por lote
+      for (let i = 0; i < ops.length; i += 400) {
+        const b = F.writeBatch(db);
+        ops.slice(i, i + 400).forEach(([ref, val]) => b.set(ref, val));
+        await b.commit();
+        onProgress?.(Math.min(ops.length, i + 400), ops.length);
+      }
     },
   });
   return store;

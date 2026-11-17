@@ -81,8 +81,12 @@ export function computeReport(state, fromKey, toKey) {
   const sortByTotal = (m) =>
     [...m.entries()].map(([name, v]) => ({ name, ...v, total: round2(v.total) })).sort((a, b) => b.total - a.total);
 
+  const cortes = (state.cortes || [])
+    .filter((k) => k.day >= fromKey && k.day <= toKey)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+
   return {
-    from: fromKey, to: toKey, lines, tickets,
+    from: fromKey, to: toKey, lines, tickets, cortes,
     byCat: [...byCat.entries()]
       .map(([name, v]) => ({
         name, items: v.items, total: round2(v.total), cost: round2(v.cost), profit: round2(v.total - v.cost),

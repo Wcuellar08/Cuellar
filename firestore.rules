@@ -52,5 +52,11 @@ service cloud.firestore {
     match /counters/{id} {
       allow read, write: if isActive();
     }
+
+    // Cortes de caja: cualquiera activo los guarda; solo la dueña los corrige o borra.
+    match /cortes/{id} {
+      allow read, create: if isActive();
+      allow update, delete: if isOwner();
+    }
   }
 }

@@ -373,3 +373,16 @@ tr.sub td:first-child { padding-left: 16px; }
 .pw-val { flex: 1; font-family: ui-monospace, Menlo, monospace; font-weight: 700; font-size: 1.1rem; }
 .center-kv { display: inline-grid; text-align: left; margin: 8px auto 0; font-size: 1.15rem; }
 .center-kv b { font-family: ui-monospace, Menlo, monospace; }
+
+/* ---------- corte de caja ---------- */
+.cash-box { border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin: 14px 0; background: var(--bg); }
+.cash-box h3 { margin-bottom: 10px; }
+.cash-box label.inline { justify-content: space-between; }
+.cash-line { display: flex; justify-content: space-between; padding: 5px 0; }
+.cash-line.grand { font-weight: 800; font-size: 1.15rem; border-top: 1px solid var(--line); margin: 6px 0 10px; padding-top: 10px; }
+.diff { font-weight: 700; padding: 10px 12px; border-radius: 10px; margin: 6px 0 0; }
+.diff.ok { background: var(--ok-soft); color: var(--ok); }
+.diff.warn { background: var(--warn-soft); color: var(--warn); }
+.diff.bad { background: var(--danger-soft); color: var(--danger); }
+.badge.bad { background: var(--danger-soft); color: var(--danger); }
+h3.mt { margin-top: 18px; }

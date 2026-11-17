@@ -1,4 +1,5 @@
-import { cleanUsername, createStore, isDemo, ROLES, validatePassword, validateUsername } from './store.js';
+import { checkBackup, cleanUsername, createStore, isDemo, ROLES, validatePassword, validateUsername } from './store.js';
+import { computeCorte } from './corte.js';
 import { CONDITIONS, GENDERS, SIZE_SUGGESTIONS } from './defaults.js';
 import {
   $, $$, catById, catName, closeModal, confirmDialog, dayKey, esc, fmtDate, fmtDateTime, itemMeta,
@@ -107,6 +108,12 @@ function renderApp() {
   updateNetBadge();
   mountView();
   if (!user.name && isOwner()) askName();
+  if (isOwner() && !isDemo) {
+    setTimeout(() => {
+      const d = daysSinceBackup();
+      if (S().items.length && (d === null || d > 7)) toast('Recuerda hacer un respaldo (Ajustes › Respaldo)');
+    }, 2500);
+  }
 }
 
 function updateNetBadge() {
@@ -677,8 +684,10 @@ const saleNet = (s) => {
 VIEWS.ventas = {
   mount(v) {
     v.innerHTML = `
+      <div class="toolbar"><button class="btn primary lg" id="s-corte">${icon('receipt')} Corte de caja</button></div>
       <div class="filters"><input id="s-q" type="search" placeholder="Buscar ticket, cliente, código…" value="${esc(ui.salesQ)}"></div>
       <div id="s-list"></div>`;
+    $('#s-corte').addEventListener('click', () => openCorte());
     $('#s-q').addEventListener('input', (e) => { ui.salesQ = e.target.value; this.refresh(true); });
     $('#s-list').addEventListener('click', (e) => {
       const r = e.target.closest('[data-sale]');
@@ -744,6 +753,180 @@ function openSaleDetail(id) {
       setTimeout(() => openSaleDetail(s.id), 50);
     }
   });
+}
+
+// =================================================================== CORTE DE CAJA
+function openCorte() {
+  const me = S().user;
+  const owner = isOwner();
+  const st = { day: dayKey(new Date()), seller: owner ? '' : me.uid, fondo: 0, contado: null, notes: '' };
+  const sellerName = (uidv) => (uidv ? S().users.find((u) => u.uid === uidv)?.name || me.name : 'Todos');
+
+  const m = openModal(`
+    <div class="modal-head"><h2>Corte de caja</h2><button class="icon-btn" data-close aria-label="Cerrar">${icon('x')}</button></div>
+    <div class="modal-body">
+      <div class="grid2">
+        <label>Día<input type="date" id="k-day" value="${st.day}" max="${dayKey(new Date())}"></label>
+        ${owner ? `<label>Vendedor<select id="k-seller"><option value="">Todos</option>
+          ${S().users.filter((u) => u.active || S().sales.some((s) => s.sellerUid === u.uid)).map((u) => `<option value="${esc(u.uid)}">${esc(u.name)}</option>`).join('')}
+          </select></label>` : `<label>Vendedor<input value="${esc(me.name)}" disabled></label>`}
+      </div>
+      <div id="k-body"></div>
+      <div id="k-saved"></div>
+    </div>
+    <div class="modal-actions">
+      <span class="grow"></span>
+      <button class="btn" data-close>Cerrar</button>
+      <button class="btn primary" id="k-save">Guardar corte</button>
+    </div>`, { wide: true });
+
+  const draw = () => {
+    const c = computeCorte(S(), st.day, st.seller, sellerName(st.seller));
+    const cashExpected = c.cash ? round2(st.fondo + c.cash.net) : null;
+    const diff = c.cash && st.contado !== null ? round2(st.contado - cashExpected) : null;
+    st.calc = { c, cashExpected, diff };
+    m.querySelector('#k-body').innerHTML = `
+      <div class="table-wrap"><table>
+        <thead><tr><th>Forma de pago</th><th class="num">Tickets</th><th class="num">Ventas</th><th class="num">Devoluciones</th><th class="num">Neto</th></tr></thead>
+        <tbody>${c.rows.map((r) => `<tr><td>${esc(r.method)}</td><td class="num">${r.tickets}</td><td class="num">${money(r.sales)}</td>
+          <td class="num">${r.returns ? '−' + money(r.returns) : '—'}</td><td class="num"><b>${money(r.net)}</b></td></tr>`).join('')}
+          <tr class="strong"><td>Total</td><td class="num">${c.tickets}</td><td class="num">${money(c.totalSales)}</td>
+          <td class="num">${c.totalReturns ? '−' + money(c.totalReturns) : '—'}</td><td class="num">${money(c.totalNet)}</td></tr>
+        </tbody></table></div>
+      ${c.cash ? `
+        <div class="cash-box">
+          <h3>Efectivo en caja</h3>
+          <label class="inline">Fondo inicial (cambio con el que abriste)<input id="k-fondo" inputmode="decimal" value="${st.fondo || ''}" placeholder="0.00"></label>
+          <div class="cash-line"><span>+ Ventas en efectivo</span><span>${money(c.cash.sales)}</span></div>
+          ${c.cash.returns ? `<div class="cash-line"><span>− Devoluciones en efectivo</span><span>−${money(c.cash.returns)}</span></div>` : ''}
+          <div class="cash-line grand"><span>Debe haber en caja</span><span id="k-exp">${money(cashExpected)}</span></div>
+          <label class="inline">Efectivo contado<input id="k-contado" inputmode="decimal" value="${st.contado ?? ''}" placeholder="Cuenta el dinero"></label>
+          <div id="k-diff">${diffHtml(diff)}</div>
+        </div>` : '<p class="muted small">No hay una forma de pago llamada "Efectivo", así que no se calcula el efectivo en caja.</p>'}
+      <label>Notas (opcional)<input id="k-notes" value="${esc(st.notes)}" placeholder="Ej. salió Q50 para bolsas"></label>`;
+    const fondo = m.querySelector('#k-fondo');
+    const contado = m.querySelector('#k-contado');
+    const live = () => {
+      st.fondo = parseNum(fondo.value);
+      st.contado = contado.value.trim() === '' ? null : parseNum(contado.value);
+      const exp = round2(st.fondo + c.cash.net);
+      const d = st.contado !== null ? round2(st.contado - exp) : null;
+      st.calc = { c, cashExpected: exp, diff: d };
+      m.querySelector('#k-exp').textContent = money(exp);
+      m.querySelector('#k-diff').innerHTML = diffHtml(d);
+    };
+    fondo?.addEventListener('input', live);
+    contado?.addEventListener('input', live);
+    m.querySelector('#k-notes').addEventListener('input', (e) => (st.notes = e.target.value));
+    drawSaved();
+  };
+  const drawSaved = () => {
+    const list = S().cortes
+      .filter((k) => k.day === st.day && (owner || k.createdByUid === me.uid))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    m.querySelector('#k-saved').innerHTML = list.length ? `
+      <h3 class="mt">Cortes guardados de este día</h3>
+      <div class="list">${list.map((k) => `<div class="row-item">
+        <div class="time">${new Date(k.createdAt).toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' })}</div>
+        <div class="grow"><div>${esc(k.sellerName)} · neto ${money(k.totalNet)}</div>
+          <small class="muted">por ${esc(k.createdBy)}${k.cashCounted !== null && k.cashCounted !== undefined ? ` · contado ${money(k.cashCounted)} de ${money(k.cashExpected)}` : ''}${k.notes ? ' · ' + esc(k.notes) : ''}</small></div>
+        ${k.difference === null || k.difference === undefined ? '' : diffBadge(k.difference)}
+      </div>`).join('')}</div>` : '';
+  };
+
+  m.querySelector('#k-day').addEventListener('change', (e) => { st.day = e.target.value || st.day; draw(); });
+  m.querySelector('#k-seller')?.addEventListener('change', (e) => { st.seller = e.target.value; draw(); });
+  m.querySelector('#k-save').addEventListener('click', async () => {
+    const { c, cashExpected, diff } = st.calc;
+    if (c.cash && st.contado === null && !(await confirmDialog('No escribiste el efectivo contado. ¿Guardar el corte así?', { okText: 'Guardar' }))) return;
+    await store.saveCorte({
+      day: st.day, createdAt: new Date().toISOString(), createdBy: me.name, createdByUid: me.uid,
+      sellerUid: st.seller, sellerName: sellerName(st.seller),
+      rows: c.rows.map(({ method, tickets, sales, returns, net }) => ({ method, tickets, sales, returns, net })),
+      tickets: c.tickets, totalSales: c.totalSales, totalReturns: c.totalReturns, totalNet: c.totalNet,
+      fondo: c.cash ? st.fondo : null, cashExpected: c.cash ? cashExpected : null,
+      cashCounted: c.cash ? st.contado : null, difference: c.cash ? diff : null, notes: st.notes.trim(),
+    });
+    toast('Corte guardado');
+    st.contado = null; st.notes = '';
+    setTimeout(draw, 50);
+  });
+  draw();
+}
+
+function diffHtml(d) {
+  if (d === null || d === undefined) return '';
+  if (Math.abs(d) < 0.005) return '<div class="diff ok">✓ La caja cuadra</div>';
+  return d > 0 ? `<div class="diff warn">Sobran ${money(d)}</div>` : `<div class="diff bad">Faltan ${money(-d)}</div>`;
+}
+function diffBadge(d) {
+  if (Math.abs(d) < 0.005) return '<span class="badge ok">Cuadra</span>';
+  return d > 0 ? `<span class="badge warn">Sobran ${money(d)}</span>` : `<span class="badge bad">Faltan ${money(-d)}</span>`;
+}
+
+// =================================================================== RESPALDO
+const BACKUP_KEY = 'ui.lastBackup';
+function daysSinceBackup() {
+  const t = lsGet(BACKUP_KEY, null);
+  return t ? Math.floor((Date.now() - new Date(t).getTime()) / 86400000) : null;
+}
+
+async function downloadBackup() {
+  const data = store.exportData();
+  const now = new Date();
+  const name = `BOOHO_respaldo_${dayKey(now)}_${pad(now.getHours(), 2)}${pad(now.getMinutes(), 2)}.json`;
+  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+  const file = new File([blob], name, { type: 'application/json' });
+  try {
+    if (navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'Respaldo BOOHO' });
+    } else {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    }
+  } catch (e) {
+    if (e.name === 'AbortError') return; // canceló el menú de compartir
+    return toast('No se pudo guardar el respaldo: ' + e.message, 'err');
+  }
+  lsSet(BACKUP_KEY, now.toISOString());
+  toast(`Respaldo listo: ${data.items.length} prendas, ${data.sales.length} ventas`);
+  if (ui.tab === 'ajustes') VIEWS.ajustes.drawBackup?.();
+}
+
+function restoreBackup() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json,application/json';
+  input.addEventListener('change', async () => {
+    const f = input.files?.[0];
+    if (!f) return;
+    let data;
+    try {
+      data = checkBackup(JSON.parse(await f.text()));
+    } catch (e) {
+      return toast(e instanceof SyntaxError ? 'El archivo está dañado o no es un respaldo.' : e.message, 'err');
+    }
+    const ok = await confirmDialog(
+      `<b>Restaurar respaldo</b><br>Del ${fmtDateTime(data.createdAt)}${data.createdBy ? ' (hecho por ' + esc(data.createdBy) + ')' : ''}:<br>
+       ${data.items.length} prendas · ${data.sales.length} ventas · ${(data.cortes || []).length} cortes<br><br>
+       <span class="small">Se recupera todo lo que está en el respaldo (lo borrado vuelve y lo cambiado regresa a como estaba).
+       Lo que se agregó después del respaldo <b>no</b> se borra.</span>`,
+      { okText: 'Restaurar' }
+    );
+    if (!ok) return;
+    try {
+      toast('Restaurando…');
+      await store.importData(data, (n, total) => toast(`Restaurando… ${n} de ${total}`));
+      toast('Respaldo restaurado');
+    } catch (e) {
+      toast('No se pudo restaurar: ' + e.message, 'err');
+    }
+  });
+  input.click();
 }
 
 // =================================================================== REPORTES
@@ -951,7 +1134,7 @@ VIEWS.ajustes = {
         ${isOwner() ? '' : '<p class="muted small">Para cambiar tu contraseña o tu nombre, pídeselo a la dueña.</p>'}
       </section>`;
     if (!isOwner()) {
-      v.innerHTML = myCard + '<p class="muted small center">BOOHO · Registro de Ventas · v1.3</p>';
+      v.innerHTML = myCard + '<p class="muted small center">BOOHO · Registro de Ventas · v1.4</p>';
       $('#a-logout').addEventListener('click', async () => { if (await confirmDialog('¿Cerrar sesión?')) store.logout(); });
       return;
     }
@@ -961,6 +1144,16 @@ VIEWS.ajustes = {
         <div class="card-head"><h3>Usuarios</h3><button class="btn small primary" id="a-newuser">${icon('plus')} Nuevo usuario</button></div>
         <p class="muted small"><b>Dueña</b>: ve y hace todo. <b>Ayudante</b>: vende, registra prendas, imprime etiquetas y hace devoluciones; no ve costos, ganancias, reportes ni ajustes.</p>
         <div id="a-users" class="list"></div>
+      </section>
+      <section class="card">
+        <h3>Respaldo</h3>
+        <p class="muted small">Guarda una copia de todo (prendas, ventas, cortes y ajustes) en un archivo.
+          En el iPad elige <b>Guardar en Archivos</b> → iCloud Drive. Hazlo al menos una vez por semana.</p>
+        <div id="a-backup-status"></div>
+        <div class="row-btns">
+          <button class="btn primary" id="a-backup">${icon('download')} Descargar respaldo</button>
+          <button class="btn" id="a-restore">Restaurar desde archivo</button>
+        </div>
       </section>
       <section class="card">
         <h3>Tienda</h3>
@@ -981,7 +1174,7 @@ VIEWS.ajustes = {
       ${isDemo ? `<section class="card"><h3>Modo demo</h3>
         <p class="muted small">Los datos se guardan solo en este dispositivo. Cuando configures Firebase, la app usará la nube y estos datos de prueba no se pasan.</p>
         <button class="btn danger ghost" id="a-reset">Borrar todos los datos de prueba</button></section>` : ''}
-      <p class="muted small center">BOOHO · Registro de Ventas · v1.3</p>`;
+      <p class="muted small center">BOOHO · Registro de Ventas · v1.4</p>`;
     this.drawCats();
     this.drawList('#a-pay', 'paymentMethods', 'Nueva forma de pago');
     this.drawList('#a-chan', 'channels', 'Nuevo canal');
@@ -998,10 +1191,21 @@ VIEWS.ajustes = {
       if (await confirmDialog('¿Borrar <b>todo</b> (prendas, ventas, usuarios y ajustes) de este dispositivo?', { okText: 'Borrar todo', danger: true })) store.resetDemo();
     });
     $('#a-newuser').addEventListener('click', () => openUserForm());
+    $('#a-backup').addEventListener('click', () => downloadBackup());
+    $('#a-restore').addEventListener('click', () => restoreBackup());
+    this.drawBackup();
     $('#a-users').addEventListener('click', (e) => {
       const r = e.target.closest('[data-user]');
       if (r) openUserForm(S().users.find((x) => x.uid === r.dataset.user));
     });
+  },
+  drawBackup() {
+    const el = $('#a-backup-status');
+    if (!el) return;
+    const d = daysSinceBackup();
+    el.innerHTML = d === null
+      ? '<p class="diff warn">Todavía no has hecho ningún respaldo desde este iPad.</p>'
+      : `<p class="${d > 7 ? 'diff warn' : 'muted small'}">Último respaldo desde este iPad: ${d === 0 ? 'hoy' : d === 1 ? 'ayer' : `hace ${d} días`}.</p>`;
   },
   refresh() {
     const el = $('#a-users');
