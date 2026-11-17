@@ -279,6 +279,7 @@ VIEWS.inicio = {
     else if (act === 'backup') switchTab('ajustes');
     else if (act === 'old') { ui.rep.preset = 'mes'; switchTab('reportes'); setTimeout(() => $$('#r-body h3').find((h) => h.textContent.startsWith('Más tiempo'))?.scrollIntoView({ block: 'start' }), 100); }
     else if (act === 'ventas') switchTab('ventas');
+    else if (act === 'reportes') switchTab('reportes');
   },
   refresh() {
     const el = $('#home');
@@ -341,8 +342,8 @@ VIEWS.inicio = {
     if (owner) {
       const w0 = new Date(now); w0.setDate(now.getDate() - 6);
       const r = computeReport(S(), dayKey(w0), today);
-      topHtml = hbarChart('Lo más vendido (últimos 7 días)', 'Prendas vendidas por subcategoría',
-        groupCount(r.lines, 'sub', (l) => [l.category, l.subcategory], (l) => l.finalPrice).slice(0, 5),
+      topHtml = donutChart('Lo más vendido (últimos 7 días)', 'Prendas vendidas por subcategoría',
+        groupCount(r.lines, 'sub', (l) => [l.category, l.subcategory], (l) => l.finalPrice),
         'vendidas', 'en ventas', 'Sin ventas en los últimos 7 días.');
     }
 
@@ -355,7 +356,8 @@ VIEWS.inicio = {
       <div class="quick">
         <button class="quick-btn primary" data-act="vender">${icon('sell')}<span>Vender</span></button>
         <button class="quick-btn" data-act="nueva">${icon('plus')}<span>Nueva prenda</span></button>
-        <button class="quick-btn" data-act="labels">${icon('tag')}<span>Etiquetas</span></button>
+        ${owner ? `<button class="quick-btn" data-act="reportes">${icon('chart')}<span>Reportes</span></button>`
+          : `<button class="quick-btn" data-act="ventas">${icon('receipt')}<span>Mis ventas</span></button>`}
         <button class="quick-btn" data-act="corte">${icon('receipt')}<span>Corte de caja</span></button>
       </div>
       <div class="home-grid">
@@ -1140,6 +1142,60 @@ function hbarChart(title, subtitle, data, countWord, amountWord, emptyMsg) {
   </section>`;
 }
 
+
+// Gráfico de dona (paleta categórica validada; "Otras" en gris)
+const DONUT_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4'];
+const DONUT_OTHER = '#a7b4c0';
+
+function donutChart(title, subtitle, data, countWord, amountWord, emptyMsg) {
+  const MAX = 5;
+  let rows = data.slice(0, MAX).map((x, i) => ({ ...x, color: DONUT_COLORS[i] }));
+  if (data.length > MAX) {
+    const rest = data.slice(MAX);
+    rows.push({ name: `Otras (${rest.length})`, count: rest.reduce((a, x) => a + x.count, 0), amount: rest.reduce((a, x) => a + x.amount, 0), color: DONUT_OTHER });
+  }
+  const total = rows.reduce((a, x) => a + x.count, 0);
+  if (!total) return `<section class="card chart-card"><div class="chart-head"><h3>${title}</h3><span class="muted small">${subtitle}</span></div><p class="empty">${emptyMsg}</p></section>`;
+  const R = 70, r = 46, C = 90; // radio exterior, interior, centro
+  const pt = (rad, a) => [C + rad * Math.sin(a), C - rad * Math.cos(a)];
+  let a0 = 0;
+  const tipOf = (x) => {
+    const pct = Math.round((x.count / total) * 100) + '%';
+    return `<b>${esc(x.name)}</b><br>${x.count} prenda${x.count === 1 ? '' : 's'} ${countWord} (${pct})<br>${money(x.amount)} ${amountWord}`;
+  };
+  const slices = rows.map((x, i) => {
+    const a1 = a0 + (x.count / total) * Math.PI * 2;
+    let d;
+    if (rows.length === 1) {
+      d = `M${C} ${C - R}A${R} ${R} 0 1 1 ${C - 0.01} ${C - R}Z M${C} ${C - r}A${r} ${r} 0 1 0 ${C + 0.01} ${C - r}Z`;
+    } else {
+      const big = a1 - a0 > Math.PI ? 1 : 0;
+      const [x1, y1] = pt(R, a0), [x2, y2] = pt(R, a1), [x3, y3] = pt(r, a1), [x4, y4] = pt(r, a0);
+      d = `M${x1} ${y1}A${R} ${R} 0 ${big} 1 ${x2} ${y2}L${x3} ${y3}A${r} ${r} 0 ${big} 0 ${x4} ${y4}Z`;
+    }
+    a0 = a1;
+    return `<path class="donut-slice" data-k="${i}" d="${d}" fill="${x.color}" data-tip="${esc(tipOf(x))}" fill-rule="evenodd"></path>`;
+  }).join('');
+  const legend = rows.map((x, i) => `
+    <div class="donut-leg hbar-row" data-k="${i}" tabindex="0" data-tip="${esc(tipOf(x))}" aria-label="${esc(x.name)}: ${x.count} ${countWord}">
+      <span class="sw" style="background:${x.color}"></span>
+      <span class="grow name">${esc(x.name)}</span>
+      <span class="hbar-val">${x.count}</span>
+      <span class="muted pct">${Math.round((x.count / total) * 100)}%</span>
+    </div>`).join('');
+  return `<section class="card chart-card">
+    <div class="chart-head"><h3>${title}</h3><span class="muted small">${subtitle}</span></div>
+    <div class="donut-wrap">
+      <svg class="donut" viewBox="0 0 180 180" role="img" aria-label="${esc(title)}">
+        ${slices}
+        <text x="90" y="88" text-anchor="middle" class="donut-num">${total}</text>
+        <text x="90" y="108" text-anchor="middle" class="donut-lbl">prendas</text>
+      </svg>
+      <div class="donut-legend">${legend}</div>
+    </div>
+  </section>`;
+}
+
 /** Tooltip al pasar el dedo / tocar una barra. */
 function bindChartTips(root) {
   let tip = $('#chart-tip');
@@ -1148,10 +1204,10 @@ function bindChartTips(root) {
     tip.id = 'chart-tip';
     tip.className = 'chart-tip';
     document.body.appendChild(tip);
-    document.addEventListener('pointerdown', (e) => { if (!e.target.closest('.hbar-row')) hideTip(); });
+    document.addEventListener('pointerdown', (e) => { if (!e.target.closest('.hbar-row, .donut-slice')) hideTip(); });
     window.addEventListener('scroll', () => hideTip(), true);
   }
-  $$('.hbar-row', root).forEach((row) => {
+  $$('.hbar-row, .donut-slice', root).forEach((row) => {
     row.addEventListener('pointerenter', (e) => e.pointerType === 'mouse' && showTip(row, root));
     row.addEventListener('pointerleave', (e) => e.pointerType === 'mouse' && hideTip());
     row.addEventListener('click', () => showTip(row, root));
@@ -1161,11 +1217,15 @@ function bindChartTips(root) {
 }
 function showTip(row, root) {
   const tip = $('#chart-tip');
-  $$('.hbar-row.active', root).forEach((r) => r.classList.toggle('active', false));
+  $$('.hbar-row.active, .donut-slice.active', root).forEach((r) => r.classList.toggle('active', false));
   row.classList.toggle('active', true);
+  // En la dona, se resaltan juntos el pedazo y su nombre en la leyenda
+  if (row.dataset.k !== undefined) {
+    row.closest('.chart-card')?.querySelectorAll(`[data-k="${row.dataset.k}"]`).forEach((x) => x.classList.toggle('active', true));
+  }
   tip.innerHTML = row.dataset.tip;
   tip.classList.toggle('show', true);
-  const bar = row.querySelector('.hbar-val').getBoundingClientRect();
+  const bar = (row.querySelector('.hbar-val') || row).getBoundingClientRect();
   const t = tip.getBoundingClientRect();
   let x = bar.right + 12;
   let y = bar.top + bar.height / 2 - t.height / 2;
@@ -1176,7 +1236,7 @@ function showTip(row, root) {
 function hideTip() {
   const tip = $('#chart-tip');
   if (tip) tip.classList.toggle('show', false);
-  $$('.hbar-row.active').forEach((r) => r.classList.toggle('active', false));
+  $$('.hbar-row.active, .donut-slice.active').forEach((r) => r.classList.toggle('active', false));
 }
 
 VIEWS.reportes = {

@@ -450,3 +450,16 @@ h3.mt { margin-top: 18px; }
 @media (max-width: 560px) {
   .quick { grid-template-columns: 1fr 1fr; }
 }
+
+/* ---------- dona ---------- */
+.donut-wrap { display: flex; align-items: center; gap: 28px; flex-wrap: wrap; }
+.donut { width: 200px; height: 200px; flex: none; }
+.donut-slice { stroke: var(--card); stroke-width: 2; cursor: pointer; transition: opacity .12s; }
+.donut:has(.donut-slice.active) .donut-slice:not(.active) { opacity: .35; }
+.donut-num { font-size: 30px; font-weight: 800; fill: var(--ink); }
+.donut-lbl { font-size: 12px; fill: var(--muted); }
+.donut-legend { flex: 1; min-width: 240px; display: flex; flex-direction: column; }
+.donut-leg { display: flex !important; align-items: center; gap: 10px; }
+.donut-leg .sw { width: 14px; height: 14px; border-radius: 4px; flex: none; }
+.donut-leg .name { font-size: .95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.donut-leg .pct { width: 44px; text-align: right; font-size: .9rem; }
