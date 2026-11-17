@@ -3,7 +3,7 @@
 const cat = (id, name, prefix, subs) => ({ id, name, prefix, subs });
 
 export const DEFAULT_SETTINGS = {
-  storeName: 'Mi Tienda',
+  storeName: 'BOOHO',
   categories: [
     cat('blusas', 'Blusas', 'BLU', ['Manga corta', 'Manga larga', 'Sin mangas', 'Crop top']),
     cat('camisas', 'Camisas', 'CAM', ['Casual', 'Formal', 'Polo']),

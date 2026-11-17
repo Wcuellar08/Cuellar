@@ -1,12 +1,12 @@
 {
-  "name": "Registro de Ventas",
-  "short_name": "Ventas",
+  "name": "BOOHO – Ventas",
+  "short_name": "BOOHO",
   "lang": "es",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#f5f3fa",
-  "theme_color": "#7c3aed",
+  "background_color": "#f2f8fd",
+  "theme_color": "#89c4ec",
   "icons": [
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" }

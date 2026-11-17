@@ -143,7 +143,7 @@ function renderLogin(app) {
     <div class="login">
       <div class="login-card">
         <div class="login-logo">${icon('tag')}</div>
-        <h1>Registro de ventas</h1>
+        <h1>Bienvenido a BOOHO</h1>
         ${isDemo ? `
           <p class="muted">Estás en <b>modo demo</b>: los datos se guardan solo en este dispositivo.
           Cuando conectemos Firebase, cada persona entrará con su correo y contraseña.</p>
@@ -295,7 +295,7 @@ VIEWS.vender = {
           const it = store.getItem(c.itemId);
           return `<div class="cart-row">
             <div class="grow"><div><span class="code">${esc(it.code)}</span> ${esc(itemTitle(it, st))}</div>
-              <small class="muted">${esc(itemMeta(it))} · Etiqueta ${money(it.price)}</small></div>
+              <small class="muted">${itemMeta(it) ? esc(itemMeta(it)) + ' · ' : ''}Etiqueta ${money(it.price)}</small></div>
             <input class="price-in" inputmode="decimal" data-price="${i}" value="${c.finalPrice}">
             <button class="icon-btn" data-rm="${i}" aria-label="Quitar">${icon('x')}</button>
           </div>`;
@@ -322,7 +322,7 @@ VIEWS.vender = {
     const html = (q ? '' : '<div class="list-caption">Agregadas recientemente</div>') + (list.length
       ? list.map((it) => `<div class="row-item">
           <div class="grow"><div><span class="code">${esc(it.code)}</span> ${esc(itemTitle(it, st))}</div>
-            <small class="muted">${esc(catName(st, it.categoryId))}${it.subcategory ? ' › ' + esc(it.subcategory) : ''} · ${esc(itemMeta(it))}</small></div>
+            <small class="muted">${esc(catName(st, it.categoryId))}${it.subcategory ? ' › ' + esc(it.subcategory) : ''}${itemMeta(it) ? ' · ' + esc(itemMeta(it)) : ''}</small></div>
           <div class="price">${money(it.price)}</div>
           ${it.status !== 'disponible' ? '<span class="badge">Vendida</span>'
             : inCart.has(it.id) ? '<span class="badge ok">En venta</span>'
@@ -461,7 +461,7 @@ VIEWS.inventario = {
     const html = list.length ? list.slice(0, 400).map((it) => `
       <div class="row-item tap" data-item="${it.id}">
         <div class="grow"><div><span class="code">${esc(it.code)}</span> ${esc(itemTitle(it, st))}</div>
-          <small class="muted">${esc(catName(st, it.categoryId))}${it.subcategory ? ' › ' + esc(it.subcategory) : ''} · ${esc(itemMeta(it))}</small></div>
+          <small class="muted">${esc(catName(st, it.categoryId))}${it.subcategory ? ' › ' + esc(it.subcategory) : ''}${itemMeta(it) ? ' · ' + esc(itemMeta(it)) : ''}</small></div>
         ${it.status === 'vendido' ? `<span class="badge">Vendida ${fmtDate(it.soldAt)}</span>` : (!it.labelPrinted ? '<span class="badge warn">Sin etiqueta</span>' : '')}
         <div class="price">${money(it.price)}</div>
       </div>`).join('')
@@ -843,7 +843,7 @@ VIEWS.ajustes = {
       ${isDemo ? `<section class="card"><h3>Modo demo</h3>
         <p class="muted small">Los datos se guardan solo en este dispositivo. Cuando configures Firebase, la app usará la nube y estos datos de prueba no se pasan.</p>
         <button class="btn danger ghost" id="a-reset">Borrar todos los datos de prueba</button></section>` : ''}
-      <p class="muted small center">Registro de Ventas · v1.0</p>`;
+      <p class="muted small center">BOOHO · Registro de Ventas · v1.1</p>`;
     this.drawCats();
     this.drawList('#a-pay', 'paymentMethods', 'Nueva forma de pago');
     this.drawList('#a-chan', 'channels', 'Nuevo canal');
@@ -926,7 +926,7 @@ async function saveSettings() {
   const d = ui.draft;
   const err = $('#a-err');
   err.textContent = '';
-  d.storeName = d.storeName.trim() || 'Mi Tienda';
+  d.storeName = d.storeName.trim() || 'BOOHO';
   const seen = new Set();
   for (const c of d.categories) {
     c.name = c.name.trim();
