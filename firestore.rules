@@ -53,6 +53,12 @@ service cloud.firestore {
       allow read, write: if isActive();
     }
 
+    // Fotos de las prendas (la foto grande; la miniatura va dentro de la prenda)
+    match /photos/{id} {
+      allow read, create, update: if isActive();
+      allow delete: if isOwner();
+    }
+
     // Cortes de caja: cualquiera activo los guarda; solo la dueña los corrige o borra.
     match /cortes/{id} {
       allow read, create: if isActive();

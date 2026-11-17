@@ -9,6 +9,7 @@ import { computeReport } from './reports.js';
 import { exportReport } from './excel.js';
 import { LABEL_FORMATS, printLabels, qrSvg } from './labels.js';
 import { openScanner } from './scanner.js';
+import { fileToPhotos, openPhotoViewer } from './photos.js';
 
 let store;
 const S = () => store.state;
@@ -59,6 +60,20 @@ const TABS = [
 const isOwner = () => store.isOwner();
 const visibleTabs = () => TABS.filter((t) => t[3] !== 'owner' || isOwner());
 
+/** Miniatura de la prenda (tocarla abre la foto grande). */
+function thumbHtml(it) {
+  return it.thumb
+    ? `<img class="thumb" src="${esc(it.thumb)}" alt="" data-photo="${esc(it.id)}">`
+    : '<span class="thumb empty"></span>';
+}
+async function showItemPhoto(id) {
+  const it = store.getItem(id);
+  if (!it) return;
+  if (it.thumb) openPhotoViewer(it.thumb, `${it.code} · ${itemTitle(it, S().settings)}`);
+  const full = await store.getPhoto(id);
+  if (full) openPhotoViewer(full, `${it.code} · ${itemTitle(it, S().settings)}`);
+}
+
 /** Reemplaza el contenido salvo que el usuario esté escribiendo dentro. */
 function safeSet(el, html) {
   if (!el) return;
@@ -88,6 +103,14 @@ async function main() {
   document.addEventListener('focusout', () => setTimeout(() => {
     if ($$('[data-stale]').length) refreshView();
   }, 50));
+  // Tocar una miniatura abre la foto grande (sin activar la fila)
+  document.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-photo]');
+    if (!t) return;
+    e.stopPropagation();
+    e.preventDefault();
+    showItemPhoto(t.dataset.photo);
+  }, true);
   await store.init();
 }
 
@@ -474,6 +497,7 @@ VIEWS.vender = {
       ? ui.cart.map((c, i) => {
           const it = store.getItem(c.itemId);
           return `<div class="cart-row">
+            ${thumbHtml(it)}
             <div class="grow"><div><span class="code">${esc(it.code)}</span> ${esc(itemTitle(it, st))}</div>
               <small class="muted">${itemMeta(it) ? esc(itemMeta(it)) + ' · ' : ''}Etiqueta ${money(it.price)}</small></div>
             <input class="price-in" inputmode="decimal" data-price="${i}" value="${c.finalPrice}">
@@ -501,6 +525,7 @@ VIEWS.vender = {
     }
     const html = (q ? '' : '<div class="list-caption">Agregadas recientemente</div>') + (list.length
       ? list.map((it) => `<div class="row-item">
+          ${thumbHtml(it)}
           <div class="grow"><div><span class="code">${esc(it.code)}</span> ${esc(itemTitle(it, st))}</div>
             <small class="muted">${esc(catName(st, it.categoryId))}${it.subcategory ? ' › ' + esc(it.subcategory) : ''}${itemMeta(it) ? ' · ' + esc(itemMeta(it)) : ''}</small></div>
           <div class="price">${money(it.price)}</div>
@@ -640,6 +665,7 @@ VIEWS.inventario = {
     if (sum) sum.textContent = `${list.length} prenda${list.length === 1 ? '' : 's'} · valor ${money(list.reduce((a, i) => a + (i.price || 0), 0))}`;
     const html = list.length ? list.slice(0, 400).map((it) => `
       <div class="row-item tap" data-item="${it.id}">
+        ${thumbHtml(it)}
         <div class="grow"><div><span class="code">${esc(it.code)}</span> ${esc(itemTitle(it, st))}</div>
           <small class="muted">${esc(catName(st, it.categoryId))}${it.subcategory ? ' › ' + esc(it.subcategory) : ''}${itemMeta(it) ? ' · ' + esc(itemMeta(it)) : ''}</small></div>
         ${it.status === 'vendido' ? `<span class="badge">Vendida ${fmtDate(it.soldAt)}</span>` : (!it.labelPrinted ? '<span class="badge warn">Sin etiqueta</span>' : '')}
@@ -661,6 +687,15 @@ function openItemForm(item = null) {
     <div class="modal-head"><h2>${isNew ? 'Nueva prenda' : `Prenda <span class="code">${esc(item.code)}</span>`}</h2>
       <button class="icon-btn" data-close aria-label="Cerrar">${icon('x')}</button></div>
     <div class="modal-body form">
+      <div class="photo-pick">
+        <div class="photo-box" id="f-photo"></div>
+        <div class="photo-btns">
+          <label class="btn">${icon('camera')} Tomar foto<input type="file" accept="image/*" capture="environment" class="file-hidden" id="f-cam"></label>
+          <label class="btn">Elegir de galería<input type="file" accept="image/*" class="file-hidden" id="f-gal"></label>
+          <button class="btn ghost danger small" id="f-photo-rm" type="button">Quitar foto</button>
+          <p class="muted small" id="f-photo-msg"></p>
+        </div>
+      </div>
       ${!isNew ? `<p class="muted small">Ingresada ${fmtDateTime(item.createdAt)}${item.createdBy ? ' por ' + esc(item.createdBy) : ''}${sold ? ` · <b>Vendida ${fmtDateTime(item.soldAt)}</b> en ${money(item.soldPrice)}` : ''}</p>` : ''}
       <div class="grid2">
         <label>Categoría *<select id="f-cat"><option value="">Elegir…</option>
@@ -704,6 +739,44 @@ function openItemForm(item = null) {
   fillSubs();
   m.querySelector('#f-cat').addEventListener('change', () => { d.subcategory = ''; fillSubs(); });
 
+  // --- foto
+  const photo = { thumb: item?.thumb || '', full: null, changed: false, removed: false };
+  let skipPhotoWarned = false;
+  const drawPhoto = () => {
+    const box = m.querySelector('#f-photo');
+    const src = photo.full || photo.thumb;
+    box.innerHTML = src ? `<img src="${esc(src)}" alt="">` : `<div class="photo-empty">${icon('camera')}<span>Sin foto</span></div>`;
+    box.classList.toggle('has', !!src);
+    m.querySelector('#f-photo-rm').style.display = src ? '' : 'none';
+  };
+  drawPhoto();
+  if (item?.thumb) store.getPhoto(item.id).then((f) => { if (f && !photo.changed && !photo.removed) { photo.full = f; drawPhoto(); } });
+  const onFile = async (input) => {
+    const f = input.files?.[0];
+    input.value = '';
+    if (!f) return;
+    const msg = m.querySelector('#f-photo-msg');
+    msg.textContent = 'Procesando foto…';
+    try {
+      Object.assign(photo, await fileToPhotos(f), { changed: true, removed: false });
+      msg.textContent = '';
+      m.querySelector('#f-err').textContent = '';
+      drawPhoto();
+    } catch (e) {
+      msg.textContent = e.message;
+    }
+  };
+  m.querySelector('#f-cam').addEventListener('change', (e) => onFile(e.target));
+  m.querySelector('#f-gal').addEventListener('change', (e) => onFile(e.target));
+  m.querySelector('#f-photo-rm').addEventListener('click', () => {
+    Object.assign(photo, { thumb: '', full: null, changed: false, removed: true });
+    drawPhoto();
+  });
+  m.querySelector('#f-photo').addEventListener('click', () => {
+    const src = photo.full || photo.thumb;
+    if (src) openPhotoViewer(src, item ? item.code : '');
+  });
+
   m.querySelector('#f-save').addEventListener('click', async (ev) => {
     const val = (id) => m.querySelector(id).value.trim();
     const data = {
@@ -716,15 +789,24 @@ function openItemForm(item = null) {
     const err = m.querySelector('#f-err');
     if (!data.categoryId) return (err.textContent = 'Elige una categoría.');
     if (!(data.price > 0)) return (err.textContent = 'Escribe el precio de venta.');
+    if (isNew && !photo.thumb && !skipPhotoWarned) {
+      skipPhotoWarned = true;
+      return (err.textContent = 'Falta la foto: toca "Tomar foto" o "Elegir de galería". Si quieres guardarla sin foto, toca Guardar otra vez.');
+    }
+    if (photo.changed) data.thumb = photo.thumb;
+    if (photo.removed) data.thumb = '';
     ev.target.disabled = true;
     try {
       if (isNew) {
         const created = await store.createItem(data);
+        if (photo.changed && photo.full) store.savePhoto(created.id, photo.full);
         ui.itemDefaults = { categoryId: data.categoryId, subcategory: data.subcategory, gender: data.gender, condition: data.condition };
         showCreated(created);
       } else {
         if (sold) delete data.price; // no cambiar el precio de algo ya vendido
         await store.updateItem(item.id, data);
+        if (photo.changed && photo.full) store.savePhoto(item.id, photo.full);
+        else if (photo.removed && item.thumb) store.deletePhoto(item.id);
         closeModal();
         toast('Cambios guardados');
       }
@@ -749,7 +831,10 @@ function showCreated(item) {
     <div class="modal-body center">
       <p class="muted">Prenda guardada con el número</p>
       <div class="created-code">${esc(item.code)}</div>
-      <div class="created-qr">${qrSvg(item.code)}</div>
+      <div class="created-media">
+        ${item.thumb ? `<img class="created-photo" src="${esc(item.thumb)}" alt="">` : ''}
+        <div class="created-qr">${qrSvg(item.code)}</div>
+      </div>
       <p>${esc(itemTitle(item, st))} · <b>${money(item.price)}</b></p>
       <p class="muted small">Escribe este número en la etiqueta o imprímela ahora (o después, todas juntas, desde “Etiquetas”).</p>
     </div>
@@ -1026,7 +1111,31 @@ function daysSinceBackup() {
 }
 
 async function downloadBackup() {
-  const data = store.exportData();
+  const btn = $('#a-backup');
+  if (btn) { btn.disabled = true; btn.textContent = 'Preparando…'; }
+  let data;
+  try {
+    data = await store.exportData();
+  } catch (e) {
+    toast('No se pudo preparar el respaldo: ' + e.message, 'err');
+    return;
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = `${icon('download')} Descargar respaldo`; }
+  }
+  const nPhotos = Object.keys(data.photos || {}).length;
+  // El iPad solo deja abrir "Compartir / Guardar en Archivos" directo desde un toque
+  const m = openModal(`
+    <div class="modal-body center">
+      <h2>Respaldo listo</h2>
+      <p>${data.items.length} prendas · ${data.sales.length} ventas · ${(data.cortes || []).length} cortes · ${nPhotos} fotos</p>
+      <p class="muted small">Toca "Guardar" y elige <b>Guardar en Archivos</b> → iCloud Drive.</p>
+    </div>
+    <div class="modal-actions"><span class="grow"></span><button class="btn" data-close>Cancelar</button>
+      <button class="btn primary lg" id="bk-save">${icon('download')} Guardar</button></div>`);
+  m.querySelector('#bk-save').addEventListener('click', () => { closeModal(); saveBackupFile(data); });
+}
+
+async function saveBackupFile(data) {
   const now = new Date();
   const name = `BOOHO_respaldo_${dayKey(now)}_${pad(now.getHours(), 2)}${pad(now.getMinutes(), 2)}.json`;
   const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
@@ -1066,7 +1175,7 @@ function restoreBackup() {
     }
     const ok = await confirmDialog(
       `<b>Restaurar respaldo</b><br>Del ${fmtDateTime(data.createdAt)}${data.createdBy ? ' (hecho por ' + esc(data.createdBy) + ')' : ''}:<br>
-       ${data.items.length} prendas · ${data.sales.length} ventas · ${(data.cortes || []).length} cortes<br><br>
+       ${data.items.length} prendas · ${data.sales.length} ventas · ${(data.cortes || []).length} cortes · ${Object.keys(data.photos || {}).length} fotos<br><br>
        <span class="small">Se recupera todo lo que está en el respaldo (lo borrado vuelve y lo cambiado regresa a como estaba).
        Lo que se agregó después del respaldo <b>no</b> se borra.</span>`,
       { okText: 'Restaurar' }

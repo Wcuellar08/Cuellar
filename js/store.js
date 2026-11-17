@@ -59,8 +59,9 @@ export function checkBackup(data) {
   return data;
 }
 
-function buildBackup(state) {
+function buildBackup(state, photos = {}) {
   return {
+    photos,
     app: 'booho-ventas', version: BACKUP_VERSION, createdAt: new Date().toISOString(),
     createdBy: state.user?.name || '',
     settings: state.settings, items: state.items, sales: state.sales, cortes: state.cortes,
@@ -106,6 +107,11 @@ function createLocalStore() {
     try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { console.error(e); }
     sync();
   };
+  // Fotos grandes aparte (en modo demo; si no caben, quedan solo mientras la app esté abierta)
+  const PKEY = 'tienda-demo-photos';
+  let photos = {};
+  try { photos = JSON.parse(localStorage.getItem(PKEY)) || {}; } catch { photos = {}; }
+  const savePhotos = () => { try { localStorage.setItem(PKEY, JSON.stringify(photos)); } catch (e) { console.warn('Fotos sin espacio', e); } };
   const publicUser = (u) => u && { uid: u.uid, username: u.username, name: u.name, role: u.role, active: u.active, createdAt: u.createdAt };
   const sync = () => {
     store.state.settings = mergeSettings(db.settings);
@@ -191,6 +197,16 @@ function createLocalStore() {
       ownerOnly();
       db.items = db.items.filter((i) => i.id !== id);
       save();
+      store.deletePhoto(id);
+    },
+    async savePhoto(itemId, dataUrl) {
+      photos[itemId] = dataUrl;
+      savePhotos();
+    },
+    async getPhoto(itemId) { return photos[itemId] || null; },
+    async deletePhoto(itemId) {
+      delete photos[itemId];
+      savePhotos();
     },
     async markLabelsPrinted(ids) {
       db.items.forEach((i) => ids.includes(i.id) && (i.labelPrinted = true));
@@ -233,7 +249,7 @@ function createLocalStore() {
     },
     async pauseSync() {},
     async resumeSync() {},
-    exportData() { return buildBackup(store.state); },
+    async exportData() { return buildBackup(store.state, { ...photos }); },
     async importData(data) {
       ownerOnly();
       checkBackup(data);
@@ -246,6 +262,8 @@ function createLocalStore() {
       db.cortes = [...cortes.values()];
       if (data.settings) db.settings = data.settings;
       db.counter = Math.max(db.counter, ...db.items.map((i) => (i.number || 0) + 1));
+      Object.assign(photos, data.photos || {});
+      savePhotos();
       save();
     },
     async resetDemo() {
@@ -283,6 +301,7 @@ async function createFirebaseStore() {
 
   const store = baseStore();
   store.mode = 'firebase';
+  const photoCache = new Map();
   let unsubs = [];
   let loginError = '';
   const stopListeners = () => { unsubs.forEach((u) => u()); unsubs = []; };
@@ -487,6 +506,27 @@ async function createFirebaseStore() {
     async deleteItem(id) {
       ownerOnly();
       fire(F.deleteDoc(F.doc(db, 'items', id)));
+      store.deletePhoto(id);
+    },
+    async savePhoto(itemId, dataUrl) {
+      photoCache.set(itemId, dataUrl);
+      fire(F.setDoc(F.doc(db, 'photos', itemId), { data: dataUrl, updatedAt: new Date().toISOString() }));
+    },
+    async getPhoto(itemId) {
+      if (photoCache.has(itemId)) return photoCache.get(itemId);
+      try {
+        const snap = await F.getDoc(F.doc(db, 'photos', itemId));
+        const v = snap.exists() ? snap.data().data : null;
+        photoCache.set(itemId, v);
+        return v;
+      } catch {
+        return null;
+      }
+    },
+    async deletePhoto(itemId) {
+      photoCache.delete(itemId);
+      if (store.isOwner()) fire(F.deleteDoc(F.doc(db, 'photos', itemId)));
+      else fire(F.setDoc(F.doc(db, 'photos', itemId), { data: null, updatedAt: new Date().toISOString() }));
     },
     async markLabelsPrinted(ids) {
       const b = F.writeBatch(db);
@@ -543,7 +583,16 @@ async function createFirebaseStore() {
       clearTimeout(store._resumeTimer);
       await F.enableNetwork(db).catch(() => {});
     },
-    exportData() { return buildBackup(store.state); },
+    async exportData() {
+      const photos = {};
+      try {
+        const snap = await F.getDocs(F.collection(db, 'photos'));
+        snap.forEach((d) => { if (d.data().data) photos[d.id] = d.data().data; });
+      } catch (e) {
+        console.error(e);
+      }
+      return buildBackup(store.state, photos);
+    },
     async importData(data, onProgress) {
       ownerOnly();
       checkBackup(data);
@@ -560,12 +609,22 @@ async function createFirebaseStore() {
       const next = Math.max(maxNum + 1, counter.exists() ? counter.data().next : 1);
       ops.push([F.doc(db, 'counters', 'items'), { next }]);
       // Firestore acepta hasta 500 cambios por lote
+      const photoOps = Object.entries(data.photos || {}).map(([id, v]) => [F.doc(db, 'photos', id), { data: v, updatedAt: new Date().toISOString() }]);
+      const total = ops.length + photoOps.length;
       for (let i = 0; i < ops.length; i += 400) {
         const b = F.writeBatch(db);
         ops.slice(i, i + 400).forEach(([ref, val]) => b.set(ref, val));
         await b.commit();
-        onProgress?.(Math.min(ops.length, i + 400), ops.length);
+        onProgress?.(Math.min(ops.length, i + 400), total);
       }
+      // Las fotos pesan más: lotes chicos
+      for (let i = 0; i < photoOps.length; i += 15) {
+        const b = F.writeBatch(db);
+        photoOps.slice(i, i + 15).forEach(([ref, val]) => b.set(ref, val));
+        await b.commit();
+        onProgress?.(ops.length + Math.min(photoOps.length, i + 15), total);
+      }
+      photoCache.clear();
     },
   });
   return store;
