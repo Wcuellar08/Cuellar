@@ -66,14 +66,14 @@ export function exportReport(report, storeName) {
     Fecha: d(l.date), Hora: time(l.date), Ticket: l.folio, 'Código': l.code, 'Descripción': l.title,
     'Categoría': l.category, 'Subcategoría': l.subcategory, Talla: l.size, Marca: l.brand,
     'Precio etiqueta': l.tagPrice, 'Precio final': l.finalPrice, Costo: l.cost, Ganancia: l.profit,
-    'Forma de pago': l.payment, Canal: l.channel, Cliente: l.customer, 'Teléfono': l.phone, Vendedor: l.seller,
+    'Forma de pago': l.payment, 'Autorización': l.auth, Canal: l.channel, Cliente: l.customer, 'Teléfono': l.phone, Vendedor: l.seller,
   })), { money: ['Precio etiqueta', 'Precio final', 'Costo', 'Ganancia'], widths: [12, 8, 16, 11] }), 'Ventas detalle');
 
   // --- Tickets ---
   XLSX.utils.book_append_sheet(wb, sheet(report.tickets.map((t) => ({
     Fecha: d(t.date), Hora: time(t.date), Ticket: t.folio, Prendas: t.items, Devueltas: t.returned,
     Subtotal: t.subtotal, Descuento: t.discount, Total: t.total, Ganancia: t.profit,
-    'Forma de pago': t.payment, Canal: t.channel, Cliente: t.customer, 'Teléfono': t.phone, Vendedor: t.seller,
+    'Forma de pago': t.payment, 'Autorización': t.auth, Canal: t.channel, Cliente: t.customer, 'Teléfono': t.phone, Vendedor: t.seller,
   })), { money: ['Subtotal', 'Descuento', 'Total', 'Ganancia'], widths: [12, 8, 16] }), 'Tickets');
 
   // --- Por día ---

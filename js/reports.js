@@ -34,7 +34,7 @@ export function computeReport(state, fromKey, toKey) {
     tickets.push({
       date: s.date, folio: s.folio, items: kept.length, returned: s.items.length - kept.length,
       subtotal, discount: round2(subtotal - total), total, profit: round2(total - cost),
-      payment: s.paymentMethod, channel: s.channel, customer: s.customerName || '', phone: s.customerPhone || '',
+      payment: s.paymentMethod, auth: s.authCode || '', channel: s.channel, customer: s.customerName || '', phone: s.customerPhone || '',
       seller: s.sellerName || '',
     });
     if (kept.length) {
@@ -52,7 +52,7 @@ export function computeReport(state, fromKey, toKey) {
         date: s.date, folio: s.folio, code: li.code, title: li.title, category: cname,
         subcategory: li.subcategory || '', size: li.size || '', brand: li.brand || '',
         tagPrice: li.tagPrice || 0, finalPrice: li.finalPrice || 0, cost: li.cost || 0, profit,
-        payment: s.paymentMethod, channel: s.channel, customer: s.customerName || '',
+        payment: s.paymentMethod, auth: s.authCode || '', channel: s.channel, customer: s.customerName || '',
         phone: s.customerPhone || '', seller: s.sellerName || '',
       });
       const cat = add(byCat, cname, () => ({ items: 0, total: 0, cost: 0, subs: new Map() }));

@@ -24,6 +24,7 @@ const ui = {
   payment: null,
   channel: lsGet('ui.channel', null),
   customer: { name: '', phone: '' },
+  auth: '',
   sellQ: '',
   inv: { q: '', status: 'disponible', cat: '' },
   salesQ: '',
@@ -455,6 +456,10 @@ VIEWS.vender = {
             <label class="inline">Descuento general (Q)<input id="c-disc" inputmode="decimal" value="${ui.discount || ''}" placeholder="0.00"></label>
             <div class="field-label">Forma de pago</div>
             <div class="chips" id="c-pay">${st.paymentMethods.map((p) => `<button class="chip ${p === ui.payment ? 'on' : ''}" data-v="${esc(p)}">${esc(p)}</button>`).join('')}</div>
+            <label id="c-auth-wrap" class="auth-field">
+              <span id="c-auth-label"></span>
+              <input id="c-auth" value="${esc(ui.auth)}" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="Obligatorio">
+            </label>
             <div class="field-label">Canal de venta</div>
             <div class="chips" id="c-chan">${st.channels.map((p) => `<button class="chip ${p === ui.channel ? 'on' : ''}" data-v="${esc(p)}">${esc(p)}</button>`).join('')}</div>
             <div class="grid2">
@@ -516,6 +521,15 @@ VIEWS.vender = {
     });
     chipGroup('#c-pay', 'payment');
     chipGroup('#c-chan', 'channel');
+    // Número de autorización: se pide en todo lo que no sea efectivo
+    const syncAuth = () => {
+      const need = needsAuth(ui.payment);
+      $('#c-auth-wrap').style.display = need ? '' : 'none';
+      $('#c-auth-label').textContent = authLabel(ui.payment);
+    };
+    $('#c-pay').addEventListener('click', syncAuth);
+    $('#c-auth').addEventListener('input', (e) => { ui.auth = e.target.value; e.target.classList.remove('invalid'); });
+    syncAuth();
     $('#c-name').addEventListener('input', (e) => (ui.customer.name = e.target.value));
     $('#c-phone').addEventListener('input', (e) => (ui.customer.phone = e.target.value));
     $('#c-pay-btn').addEventListener('click', () => checkout());
@@ -602,11 +616,33 @@ function resetCart() {
   ui.discount = 0;
   ui.customer = { name: '', phone: '' };
   ui.sellQ = '';
+  ui.auth = '';
+}
+
+/** Todo lo que no sea efectivo pide número de autorización / referencia. */
+const needsAuth = (method) => !!method && !normalize(method).includes('efectivo');
+function authLabel(method) {
+  const n = normalize(method);
+  if (n.includes('transfer') || n.includes('deposit')) return `Número de referencia de la ${n.includes('deposit') ? 'boleta' : 'transferencia'} *`;
+  if (n.includes('tarjeta')) return 'Número de autorización (voucher) *';
+  return `Número de autorización (${method}) *`;
 }
 
 async function checkout() {
   if (!ui.cart.length) return toast('Agrega al menos una prenda', 'err');
   if (ui.cart.some((c) => c.finalPrice < 0)) return toast('Revisa los precios', 'err');
+  const auth = needsAuth(ui.payment) ? String(ui.auth || '').trim().replace(/\s+/g, '').toUpperCase() : '';
+  if (needsAuth(ui.payment)) {
+    if (!auth) {
+      const inp = $('#c-auth');
+      inp?.classList.add('invalid');
+      inp?.focus();
+      return toast(`Escribe el número de autorización de ${ui.payment}`, 'err');
+    }
+    // Avisa si ese número ya se usó en otra venta (posible venta repetida)
+    const dup = S().sales.find((s) => s.authCode && s.authCode === auth && s.paymentMethod === ui.payment);
+    if (dup && !(await confirmDialog(`El número <b>${esc(auth)}</b> ya está en la venta <b>${esc(dup.folio)}</b> del ${fmtDateTime(dup.date)}.<br>¿Seguro que es otra venta?`, { okText: 'Sí, registrar', cancelText: 'Revisar' }))) return;
+  }
   const st = S().settings;
   const t = cartTotals();
   // Reparte el descuento general entre las prendas, proporcional a su precio
@@ -623,7 +659,7 @@ async function checkout() {
   if (lines.length && diff) lines[lines.length - 1].finalPrice = round2(lines[lines.length - 1].finalPrice + diff);
 
   const ok = await confirmDialog(
-    `<b>Cobrar ${money(t.total)}</b><br>${lines.length} prenda${lines.length === 1 ? '' : 's'} · ${esc(ui.payment)} · ${esc(ui.channel)}${ui.customer.name ? '<br>Cliente: ' + esc(ui.customer.name) : ''}`,
+    `<b>Cobrar ${money(t.total)}</b><br>${lines.length} prenda${lines.length === 1 ? '' : 's'} · ${esc(ui.payment)} · ${esc(ui.channel)}${auth ? `<br>Autorización: <b>${esc(auth)}</b>` : ''}${ui.customer.name ? '<br>Cliente: ' + esc(ui.customer.name) : ''}`,
     { okText: 'Confirmar venta' }
   );
   if (!ok) return;
@@ -631,7 +667,7 @@ async function checkout() {
   const folio = `T${String(now.getFullYear()).slice(2)}${pad(now.getMonth() + 1, 2)}${pad(now.getDate(), 2)}-${pad(now.getHours(), 2)}${pad(now.getMinutes(), 2)}${pad(now.getSeconds(), 2)}`;
   const sale = {
     date: now.toISOString(), folio, items: lines, subtotal: t.tagTotal, discount: round2(t.tagTotal - t.total),
-    total: t.total, paymentMethod: ui.payment, channel: ui.channel,
+    total: t.total, paymentMethod: ui.payment, channel: ui.channel, authCode: auth,
     customerName: ui.customer.name.trim(), customerPhone: ui.customer.phone.trim(),
     sellerUid: S().user.uid, sellerName: S().user.name || S().user.username || '',
   };
@@ -991,7 +1027,7 @@ VIEWS.ventas = {
   mount(v) {
     v.innerHTML = `
       <div class="toolbar"><button class="btn primary lg" id="s-corte">${icon('receipt')} Corte de caja</button></div>
-      <div class="filters"><input id="s-q" type="search" placeholder="Buscar ticket, cliente, código…" value="${esc(ui.salesQ)}"></div>
+      <div class="filters"><input id="s-q" type="search" placeholder="Buscar ticket, cliente, código, autorización…" value="${esc(ui.salesQ)}"></div>
       <div id="s-list"></div>`;
     $('#s-corte').addEventListener('click', () => openCorte());
     $('#s-q').addEventListener('input', (e) => { ui.salesQ = e.target.value; this.refresh(true); });
@@ -1003,7 +1039,7 @@ VIEWS.ventas = {
   refresh(force) {
     const q = normalize(ui.salesQ);
     const list = S().sales
-      .filter((s) => !q || normalize([s.folio, s.customerName, s.customerPhone, s.paymentMethod, s.channel, s.sellerName, ...s.items.map((i) => i.code + ' ' + i.title)].join(' ')).includes(q))
+      .filter((s) => !q || normalize([s.folio, s.authCode, s.customerName, s.customerPhone, s.paymentMethod, s.channel, s.sellerName, ...s.items.map((i) => i.code + ' ' + i.title)].join(' ')).includes(q))
       .sort((a, b) => b.date.localeCompare(a.date))
       .slice(0, 300);
     const groups = new Map();
@@ -1015,7 +1051,7 @@ VIEWS.ventas = {
         return `<div class="row-item tap" data-sale="${s.id}">
           <div class="time">${new Date(s.date).toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' })}</div>
           <div class="grow"><div>${n.count} prenda${n.count === 1 ? '' : 's'}${s.customerName ? ' · ' + esc(s.customerName) : ''}</div>
-            <small class="muted">${esc(s.folio)} · ${esc(s.paymentMethod)} · ${esc(s.channel)} · ${esc(s.sellerName || '')}</small></div>
+            <small class="muted">${esc(s.folio)} · ${esc(s.paymentMethod)}${s.authCode ? ` #${esc(s.authCode)}` : ''} · ${esc(s.channel)} · ${esc(s.sellerName || '')}</small></div>
           ${n.returned ? `<span class="badge warn">${n.returned} devuelta${n.returned === 1 ? '' : 's'}</span>` : ''}
           <div class="price">${money(n.total)}</div>
         </div>`;
@@ -1034,7 +1070,9 @@ function openSaleDetail(id) {
     <div class="modal-head"><h2>Ticket ${esc(s.folio)}</h2><button class="icon-btn" data-close aria-label="Cerrar">${icon('x')}</button></div>
     <div class="modal-body">
       <p class="muted">${fmtDateTime(s.date)} · vendió ${esc(s.sellerName || '')}</p>
-      <div class="kv"><span>Forma de pago</span><b>${esc(s.paymentMethod)}</b><span>Canal</span><b>${esc(s.channel)}</b>
+      <div class="kv"><span>Forma de pago</span><b>${esc(s.paymentMethod)}</b>
+        ${s.authCode ? `<span>Autorización</span><b class="mono">${esc(s.authCode)}</b>` : ''}
+        <span>Canal</span><b>${esc(s.channel)}</b>
         ${s.customerName ? `<span>Cliente</span><b>${esc(s.customerName)}</b>` : ''}
         ${s.customerPhone ? `<span>Teléfono</span><b>${esc(s.customerPhone)}</b>` : ''}</div>
       <div class="list">${s.items.map((li) => `
