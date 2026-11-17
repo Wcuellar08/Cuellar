@@ -17,4 +17,11 @@
 //  };
 // ============================================================
 
-export const firebaseConfig = null;
+export const firebaseConfig = {
+  apiKey: 'AIzaSyBmpWH7tsf7Zi2jn28EwKm9s4Jamo8Ewhc',
+  authDomain: 'booho-ventas.firebaseapp.com',
+  projectId: 'booho-ventas',
+  storageBucket: 'booho-ventas.firebasestorage.app',
+  messagingSenderId: '197824015848',
+  appId: '1:197824015848:web:8811de7937c15ab86cc85d',
+};
