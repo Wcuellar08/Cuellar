@@ -47,6 +47,7 @@ const ICONS = {
   camera: '<path d="M4 7h3l2-3h6l2 3h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="4"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   tag: '<path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z"/><circle cx="8" cy="8" r="1.5"/>',
+  logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
   x: '<path d="M6 6l12 12M18 6 6 18"/>',
   download: '<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>',
 };
@@ -150,7 +151,11 @@ function renderApp() {
       <div class="brand" id="brand" role="button" tabindex="0" title="Inicio">${icon('tag')}<span id="store-name">${esc(S().settings.storeName)}</span>
         ${isDemo ? '<span class="badge warn">Modo demo</span>' : ''}</div>
       <div class="top-right"><span id="net" class="net"></span>
-        <button class="bell" id="bell" aria-label="Notificaciones">${icon('bell')}<span class="bell-n" id="bell-n"></span></button><span class="who">${esc(user.name || user.username || '')}${isOwner() ? '' : ' · Ayudante'}</span></div>
+        <button class="bell" id="bell" aria-label="Notificaciones">${icon('bell')}<span class="bell-n" id="bell-n"></span></button><button class="who" id="who" aria-haspopup="menu" aria-expanded="false">
+          <span class="who-avatar">${esc((user.name || user.username || '?').trim().charAt(0).toUpperCase())}</span>
+          <span class="who-name">${esc(user.name || user.username || '')}</span>
+          <svg class="who-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </button></div>
     </header>
     <main id="view"></main>
     <nav class="tabbar">${visibleTabs().map(([id, label, ic]) =>
@@ -159,6 +164,7 @@ function renderApp() {
   $$('.tabbar button').forEach((b) => b.addEventListener('click', () => switchTab(b.dataset.tab)));
   $('#brand').addEventListener('click', () => switchTab('inicio'));
   $('#bell').addEventListener('click', () => openNotifications());
+  $('#who').addEventListener('click', (e) => { e.stopPropagation(); toggleUserMenu(); });
   updateBell();
   updateNetBadge();
   mountView();
@@ -1535,6 +1541,73 @@ function openLogs() {
   draw();
 }
 
+// =================================================================== MENÚ DEL USUARIO (nombre arriba a la derecha)
+const THEMES = [['auto', 'Automático'], ['light', 'Claro'], ['dark', 'Oscuro']];
+const currentTheme = () => document.documentElement.dataset.theme || 'auto';
+
+function setTheme(t) {
+  if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+  else delete document.documentElement.dataset.theme;
+  try { localStorage.setItem('ui.theme', t); } catch { /* sin almacenamiento */ }
+  // Color de la barra del iPad
+  const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+  $$('meta[name="theme-color"]').forEach((m) => {
+    if (t === 'auto') m.setAttribute('content', m.media.includes('dark') ? '#121418' : '#faf8f5');
+    else m.setAttribute('content', bg);
+  });
+  refreshView(); // los gráficos usan colores distintos en oscuro
+}
+// En automático, si el iPad cambia de claro a oscuro, se redibujan los gráficos
+window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', () => { if (currentTheme() === 'auto') refreshView(); });
+
+function closeUserMenu() {
+  $('#user-menu')?.remove();
+  $('#who')?.setAttribute('aria-expanded', 'false');
+  document.removeEventListener('pointerdown', onMenuOutside, true);
+  document.removeEventListener('keydown', onMenuKey);
+}
+function onMenuOutside(e) { if (!e.target.closest('#user-menu, #who')) closeUserMenu(); }
+function onMenuKey(e) { if (e.key === 'Escape') closeUserMenu(); }
+
+function toggleUserMenu() {
+  if ($('#user-menu')) return closeUserMenu();
+  const u = S().user;
+  const menu = document.createElement('div');
+  menu.id = 'user-menu';
+  menu.className = 'user-menu';
+  menu.setAttribute('role', 'menu');
+  const drawThemes = () => THEMES.map(([k, l]) => `<button class="seg ${currentTheme() === k ? 'on' : ''}" data-theme-opt="${k}" role="menuitemradio" aria-checked="${currentTheme() === k}">${l}</button>`).join('');
+  menu.innerHTML = `
+    <div class="um-head">
+      <div class="avatar">${esc((u.name || u.username || '?').trim().charAt(0).toUpperCase())}</div>
+      <div class="grow"><div class="um-name">${esc(u.name || '')}</div>
+        <div class="muted small">${esc(u.username || '')} · ${esc(ROLES[u.role] || '')}</div></div>
+    </div>
+    <button class="um-item" data-um="config" role="menuitem">${icon('gear')}<span>Configuración</span></button>
+    <div class="um-section">
+      <div class="um-label">Apariencia</div>
+      <div class="segmented" id="um-theme">${drawThemes()}</div>
+    </div>
+    <button class="um-item danger" data-um="logout" role="menuitem">${icon('logout')}<span>Cerrar sesión</span></button>`;
+  document.body.appendChild(menu);
+  const r = $('#who').getBoundingClientRect();
+  menu.style.top = `${r.bottom + 8}px`;
+  menu.style.right = `${Math.max(8, window.innerWidth - r.right)}px`;
+  $('#who').setAttribute('aria-expanded', 'true');
+  menu.addEventListener('click', async (e) => {
+    const th = e.target.closest('[data-theme-opt]');
+    if (th) { setTheme(th.dataset.themeOpt); $('#um-theme').innerHTML = drawThemes(); return; }
+    const it = e.target.closest('[data-um]');
+    if (!it) return;
+    closeUserMenu();
+    if (it.dataset.um === 'config') switchTab('ajustes');
+    if (it.dataset.um === 'logout' && (await confirmDialog('¿Cerrar sesión?', { okText: 'Cerrar sesión' }))) store.logout();
+  });
+  // El toque que abrió el menú ya pasó, así que se puede escuchar desde ya
+  document.addEventListener('pointerdown', onMenuOutside, true);
+  document.addEventListener('keydown', onMenuKey);
+}
+
 // =================================================================== NOTIFICACIONES
 function updateBell() {
   const n = pendingSocial().reduce((a, i) => a + i.pendingUnpublish.length, 0) + shipmentsBy('por_empacar').length;
@@ -1837,7 +1910,12 @@ function groupCount(rows, group, keyFn, amountFn) {
 // Colores de categoría (paleta validada para daltonismo). Cada categoría tiene siempre el
 // mismo color, según su lugar en Ajustes; sus subcategorías usan el color de la categoría.
 // Paleta validada; en modo oscuro se usan los mismos tonos ajustados para fondo oscuro
-const isDark = () => window.matchMedia?.('(prefers-color-scheme: dark)').matches;
+const isDark = () => {
+  const t = document.documentElement.dataset.theme;
+  if (t === 'dark') return true;
+  if (t === 'light') return false;
+  return !!window.matchMedia?.('(prefers-color-scheme: dark)').matches;
+};
 const CAT_LIGHT = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948'];
 const CAT_DARK = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#0ca30c', '#9085e9', '#e66767'];
 const CAT_COLORS = new Proxy([], { get: (_, k) => (isDark() ? CAT_DARK : CAT_LIGHT)[k] });
