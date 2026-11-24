@@ -1,5 +1,5 @@
 // Impresión de etiquetas con código QR.
-import { esc, money } from './util.js';
+import { esc, money, sizeText } from './util.js';
 
 export const LABEL_FORMATS = {
   carta: {
@@ -26,7 +26,7 @@ export function labelHtml(item, title, storeName) {
       <div class="label-store">${esc(storeName)}</div>
       <div class="label-code">${esc(item.code)}</div>
       <div class="label-desc">${esc(title)}</div>
-      ${item.size ? `<div class="label-size">Talla ${esc(item.size)}</div>` : ''}
+      ${item.size ? `<div class="label-size">Talla ${esc(sizeText(item))}</div>` : ''}
       <div class="label-price">${item.originalPrice ? `<s class="label-old">${money(item.originalPrice)}</s> ` : ''}${money(item.price)}</div>
     </div>
   </div>`;

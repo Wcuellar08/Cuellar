@@ -1,3 +1,5 @@
+import { WAIST_TO_US_WOMEN } from './defaults.js';
+
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
@@ -45,15 +47,28 @@ export function itemTitle(item, settings) {
   return parts.join(' · ');
 }
 
+/** Talla equivalente de EE. UU. para pantalones de dama en talla de cintura (28 → 6). */
+export function usWomenSize(size) {
+  const m = String(size ?? '').trim().match(/^(\d{2})$/);
+  return m ? WAIST_TO_US_WOMEN[m[1]] || '' : '';
+}
+
+/** Talla para mostrar: "28 (6)" si es de dama y la talla es de cintura; si no, la talla tal cual. */
+export function sizeText(item) {
+  const size = String(item?.size ?? '').trim();
+  const us = item?.gender === 'Dama' ? usWomenSize(size) : '';
+  return us ? `${size} (${us})` : size;
+}
+
 export function itemMeta(item) {
-  return [item.size && `Talla ${item.size}`, item.brand, item.color, item.condition, item.gender]
+  return [item.size && `Talla ${sizeText(item)}`, item.brand, item.color, item.condition, item.gender]
     .filter(Boolean)
     .join(' · ');
 }
 
 export function itemSearchText(item, settings) {
   return normalize(
-    [item.code, item.description, item.brand, item.color, item.size, item.subcategory, catName(settings, item.categoryId)].join(' ')
+    [item.code, item.description, item.brand, item.color, sizeText(item), item.subcategory, catName(settings, item.categoryId)].join(' ')
   );
 }
 

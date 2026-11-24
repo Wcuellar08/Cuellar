@@ -6,6 +6,8 @@ App para iPad, que se abre en Safari, para llevar el inventario, registrar venta
 
 - **Inventario**: cada prenda recibe un número único según su categoría (`BLU-0001`, `PAN-0002`, …).
   El consecutivo es uno solo para toda la tienda.
+- **Tallas de dama**: si la prenda es de **Dama** y la talla es de cintura (24–34), la app muestra también
+  la talla de EE. UU. Por ejemplo, `28 (6)`. Sale en listas, etiquetas, búsqueda y Excel. Una búsqueda de "(6)" encuentra las 28.
 - **Fotos**: al registrar una prenda la app pide una foto (cámara o galería). Se achica en el iPad y se guarda
   en la base de datos (sin costo extra). La miniatura sale en las listas; al tocarla se ve en grande.
 - **Redes (Instagram, Vitrinnea…)**: en cada prenda se marca dónde está publicada. Al venderla, la campanita 🔔

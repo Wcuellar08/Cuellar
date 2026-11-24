@@ -38,3 +38,10 @@ export const SIZE_SUGGESTIONS = [
   '35', '36', '37', '38', '39', '40', '41', '42', '43', '44',
   'Única',
 ];
+
+// Talla de cintura (pulgadas) de pantalón de dama → talla numérica de EE. UU.
+// Es la tabla más común; algunas marcas (ej. Levi's) quedan una talla arriba.
+export const WAIST_TO_US_WOMEN = {
+  23: '00', 24: '00', 25: '0', 26: '2', 27: '4', 28: '6', 29: '8',
+  30: '10', 31: '12', 32: '14', 33: '16', 34: '18',
+};

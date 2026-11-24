@@ -3,7 +3,7 @@ import { computeCorte } from './corte.js';
 import { CONDITIONS, GENDERS, SIZE_SUGGESTIONS } from './defaults.js';
 import {
   $, $$, catById, catName, closeModal, confirmDialog, dayKey, esc, fmtDate, fmtDateTime, itemMeta,
-  itemSearchText, itemTitle, money, normalize, openModal, pad, parseNum, round2, toast, uid,
+  itemSearchText, itemTitle, money, normalize, openModal, pad, parseNum, round2, sizeText, toast, uid, usWomenSize,
 } from './util.js';
 import { computeReport } from './reports.js';
 import { exportReport } from './excel.js';
@@ -859,6 +859,7 @@ function openItemForm(item = null) {
         <label>Precio de venta (Q) *<input id="f-price" inputmode="decimal" value="${d.price ?? ''}" placeholder="0.00"></label>
       </div>
       ${!isNew && !sold ? '<p class="muted small">Si cambias la categoría, el código se queda igual.</p>' : ''}
+      <p class="muted small" id="f-size-hint"></p>
       <datalist id="sizes">${[...new Set(SIZE_SUGGESTIONS)].map((s) => `<option value="${esc(s)}">`).join('')}</datalist>
       <datalist id="brands">${[...new Set(S().items.map((i) => i.brand).filter(Boolean))].sort().map((s) => `<option value="${esc(s)}">`).join('')}</datalist>
       <p id="f-err" class="err-text"></p>
@@ -880,6 +881,18 @@ function openItemForm(item = null) {
   };
   fillSubs();
   m.querySelector('#f-cat').addEventListener('change', () => { d.subcategory = ''; fillSubs(); });
+
+  // --- equivalencia de talla de dama (28 → 6)
+  const sizeHint = () => {
+    const us = usWomenSize(m.querySelector('#f-size').value);
+    const g = m.querySelector('#f-gender').value;
+    m.querySelector('#f-size-hint').textContent = !us || (g && g !== 'Dama') ? ''
+      : g === 'Dama' ? `Talla ${us} de dama (EE. UU.). Saldrá como "${m.querySelector('#f-size').value.trim()} (${us})".`
+      : `Si es de dama, equivale a talla ${us}. Elige Género: Dama para que salga en la etiqueta.`;
+  };
+  m.querySelector('#f-size').addEventListener('input', sizeHint);
+  m.querySelector('#f-gender').addEventListener('change', sizeHint);
+  sizeHint();
 
   m.querySelector('#f-pub')?.addEventListener('click', (e) => {
     const c = e.target.closest('[data-p]');
@@ -1044,7 +1057,7 @@ function openLabelsModal(preselect = null) {
       <label class="row-item check">
         <input type="checkbox" data-id="${it.id}" ${selected.has(it.id) ? 'checked' : ''}>
         <div class="grow"><span class="code">${esc(it.code)}</span> ${esc(itemTitle(it, st))}
-          <small class="muted">${it.size ? 'Talla ' + esc(it.size) + ' · ' : ''}${money(it.price)}</small></div>
+          <small class="muted">${it.size ? 'Talla ' + esc(sizeText(it)) + ' · ' : ''}${money(it.price)}</small></div>
         ${it.labelPrinted ? '<span class="badge">Impresa</span>' : ''}
       </label>`).join('') : '<p class="empty">No hay etiquetas pendientes de imprimir.</p>';
     m.querySelector('#lb-print').textContent = `Imprimir (${selected.size})`;

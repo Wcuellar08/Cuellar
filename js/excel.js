@@ -1,5 +1,5 @@
 // Exporta el reporte a un archivo .xlsx con varias hojas (usa SheetJS).
-import { fmtDate } from './util.js';
+import { fmtDate, sizeText } from './util.js';
 
 const MONEY_FMT = '"Q"#,##0.00';
 const PCT_FMT = '0.0%';
@@ -103,7 +103,7 @@ export function exportReport(report, storeName) {
   // --- Inventario ---
   XLSX.utils.book_append_sheet(wb, sheet(report.inventory.map((i) => ({
     'Código': i.code, 'Descripción': i.title, 'Categoría': i.categoryName, 'Subcategoría': i.subcategory || '',
-    Talla: i.size || '', Marca: i.brand || '', Color: i.color || '', Estado: i.condition || '', 'Género': i.gender || '',
+    Talla: sizeText(i), Marca: i.brand || '', Color: i.color || '', Estado: i.condition || '', 'Género': i.gender || '',
     Costo: i.cost || 0, Precio: i.price || 0, 'Fecha ingreso': d(i.createdAt), 'Días en inventario': i.days,
   })), { money: ['Costo', 'Precio'], widths: [11] }), 'Inventario');
 
