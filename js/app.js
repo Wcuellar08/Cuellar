@@ -835,8 +835,7 @@ function openItemForm(item = null) {
       <div class="photo-pick">
         <div class="photo-box" id="f-photo"></div>
         <div class="photo-btns">
-          <label class="btn">${icon('camera')} Tomar foto<input type="file" accept="image/*" capture="environment" class="file-hidden" id="f-cam"></label>
-          <label class="btn">Elegir de galería<input type="file" accept="image/*" class="file-hidden" id="f-gal"></label>
+          <label class="btn">${icon('camera')} <span id="f-photo-lbl">Agregar foto</span><input type="file" accept="image/*" class="file-hidden" id="f-gal"></label>
           <button class="btn ghost danger small" id="f-photo-rm" type="button">Quitar foto</button>
           <p class="muted small" id="f-photo-msg"></p>
         </div>
@@ -922,6 +921,7 @@ function openItemForm(item = null) {
     box.innerHTML = src ? `<img src="${esc(src)}" alt="">` : `<div class="photo-empty">${icon('camera')}<span>Sin foto</span></div>`;
     box.classList.toggle('has', !!src);
     m.querySelector('#f-photo-rm').style.display = src ? '' : 'none';
+    m.querySelector('#f-photo-lbl').textContent = src ? 'Cambiar foto' : 'Agregar foto';
   };
   drawPhoto();
   if (item?.thumb) store.getPhoto(item.id).then((f) => { if (f && !photo.changed && !photo.removed) { photo.full = f; drawPhoto(); } });
@@ -940,7 +940,7 @@ function openItemForm(item = null) {
       msg.textContent = e.message;
     }
   };
-  m.querySelector('#f-cam').addEventListener('change', (e) => onFile(e.target));
+  // Un solo botón: el iPad ofrece Fototeca, Tomar foto o Seleccionar archivo
   m.querySelector('#f-gal').addEventListener('change', (e) => onFile(e.target));
   m.querySelector('#f-photo-rm').addEventListener('click', () => {
     Object.assign(photo, { thumb: '', full: null, changed: false, removed: true });
@@ -966,7 +966,7 @@ function openItemForm(item = null) {
     if (!(data.price > 0)) return (err.textContent = 'Escribe el precio de venta.');
     if (isNew && !photo.thumb && !skipPhotoWarned) {
       skipPhotoWarned = true;
-      return (err.textContent = 'Falta la foto: toca "Tomar foto" o "Elegir de galería". Si quieres guardarla sin foto, toca Guardar otra vez.');
+      return (err.textContent = 'Falta la foto: toca "Agregar foto". Si quieres guardarla sin foto, toca Guardar otra vez.');
     }
     if (photo.changed) data.thumb = photo.thumb;
     if (photo.removed) data.thumb = '';

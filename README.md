@@ -6,7 +6,7 @@ App para iPad, que se abre en Safari, para llevar el inventario, registrar venta
 
 - **Inventario**: cada prenda recibe un número único según su categoría (`BLU-0001`, `PAN-0002`, …).
   El consecutivo es uno solo para toda la tienda.
-- **Fotos**: al registrar una prenda la app pide una foto (cámara o galería). Se achica en el iPad y se guarda
+- **Fotos**: al registrar una prenda la app pide una foto (botón "Agregar foto": fototeca, cámara o archivo). Se achica en el iPad y se guarda
   en la base de datos (sin costo extra). La miniatura sale en las listas; al tocarla se ve en grande.
 - **Redes (Instagram, Vitrinnea…)**: en cada prenda se marca dónde está publicada. Al venderla, la campanita 🔔
   recuerda marcarla como vendida en esas redes. La lista de redes se cambia en Ajustes.
