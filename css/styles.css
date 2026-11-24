@@ -788,3 +788,8 @@ td.num { font-variant-numeric: tabular-nums; }
 #print-area .label-code { font-family: var(--font-ui); font-weight: 600; letter-spacing: .04em; }
 #print-area .label-price { font-weight: 600; }
 .row-item .time { width: 76px; font-size: .9rem; white-space: nowrap; }
+
+/* ---------- tallas de pantalón ---------- */
+.size-chips { margin: -2px 0 6px; }
+.size-chips .chips { gap: 6px; }
+.size-chip { min-height: 36px; padding: 6px 12px; font-size: 14px; font-variant-numeric: tabular-nums; }

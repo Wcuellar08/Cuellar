@@ -1,6 +1,6 @@
 import { checkBackup, cleanUsername, createStore, isDemo, ROLES, validatePassword, validateUsername } from './store.js';
 import { computeCorte } from './corte.js';
-import { CONDITIONS, GENDERS, SIZE_SUGGESTIONS } from './defaults.js';
+import { CONDITIONS, GENDERS, PANTS_SIZES, SIZE_SUGGESTIONS, usesPantsSizes } from './defaults.js';
 import {
   $, $$, catById, catName, closeModal, confirmDialog, dayKey, esc, fmtDate, fmtDateTime, itemMeta,
   itemSearchText, itemTitle, money, normalize, openModal, pad, parseNum, round2, toast, uid,
@@ -850,6 +850,7 @@ function openItemForm(item = null) {
         <label>Marca<input id="f-brand" value="${esc(d.brand || '')}" list="brands"></label>
         <label>Color<input id="f-color" value="${esc(d.color || '')}"></label>
       </div>
+      <div id="f-size-chips" class="size-chips"></div>
       <div class="grid2">
         <label>Estado<select id="f-cond"><option value=""></option>${opts(CONDITIONS, d.condition)}</select></label>
         <label>Género<select id="f-gender"><option value=""></option>${opts(GENDERS, d.gender)}</select></label>
@@ -859,7 +860,7 @@ function openItemForm(item = null) {
         <label>Precio de venta (Q) *<input id="f-price" inputmode="decimal" value="${d.price ?? ''}" placeholder="0.00"></label>
       </div>
       ${!isNew && !sold ? '<p class="muted small">Si cambias la categoría, el código se queda igual.</p>' : ''}
-      <datalist id="sizes">${[...new Set(SIZE_SUGGESTIONS)].map((s) => `<option value="${esc(s)}">`).join('')}</datalist>
+      <datalist id="sizes">${[...new Set([...PANTS_SIZES, ...SIZE_SUGGESTIONS])].map((s) => `<option value="${esc(s)}">`).join('')}</datalist>
       <datalist id="brands">${[...new Set(S().items.map((i) => i.brand).filter(Boolean))].sort().map((s) => `<option value="${esc(s)}">`).join('')}</datalist>
       <p id="f-err" class="err-text"></p>
     </div>
@@ -879,7 +880,27 @@ function openItemForm(item = null) {
       subs.map((s) => `<option ${s === cur ? 'selected' : ''}>${esc(s)}</option>`).join('');
   };
   fillSubs();
-  m.querySelector('#f-cat').addEventListener('change', () => { d.subcategory = ''; fillSubs(); });
+
+  // Tallas de pantalón: botones "28 (6-8)" según la categoría
+  const sizeInput = m.querySelector('#f-size');
+  const drawSizes = () => {
+    const box = m.querySelector('#f-size-chips');
+    const pants = usesPantsSizes(catById(st, m.querySelector('#f-cat').value));
+    box.style.display = pants ? '' : 'none';
+    if (!pants) return;
+    const cur = sizeInput.value.trim();
+    box.innerHTML = `<div class="field-label">Talla de pantalón · cintura (talla)</div>
+      <div class="chips">${PANTS_SIZES.map((sz) => `<button type="button" class="chip size-chip ${sz === cur ? 'on' : ''}" data-size="${esc(sz)}">${esc(sz)}</button>`).join('')}</div>`;
+  };
+  m.querySelector('#f-size-chips').addEventListener('click', (e) => {
+    const c = e.target.closest('[data-size]');
+    if (!c) return;
+    sizeInput.value = c.dataset.size;
+    drawSizes();
+  });
+  sizeInput.addEventListener('input', drawSizes);
+  drawSizes();
+  m.querySelector('#f-cat').addEventListener('change', () => { d.subcategory = ''; fillSubs(); drawSizes(); });
 
   m.querySelector('#f-pub')?.addEventListener('click', (e) => {
     const c = e.target.closest('[data-p]');

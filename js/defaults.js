@@ -30,6 +30,15 @@ export const DEFAULT_SETTINGS = {
 
 export const CONDITIONS = ['Nueva con etiqueta', 'Como nueva', 'Buen estado', 'Con detalle'];
 export const GENDERS = ['Dama', 'Caballero', 'Niña', 'Niño', 'Unisex'];
+// Tallas de pantalón (dama): cintura en pulgadas y su equivalente en talla numérica.
+// Se muestran como botones al registrar pantalones, shorts o faldas.
+export const PANTS_SIZES = [
+  '24 (00-0)', '25 (0-2)', '26 (2-4)', '27 (4-6)', '28 (6-8)', '29 (8-10)', '30 (10-12)',
+  '31 (12-14)', '32 (14-16)', '33 (16)', '34 (16-18)', '36 (18-20)', '38 (20-22)',
+];
+/** ¿La categoría usa tallas de pantalón? (por nombre o id: pantalones, shorts, faldas, jeans) */
+export const usesPantsSizes = (cat) => !!cat && /pantal|short|falda|jean/i.test(`${cat.id} ${cat.name}`);
+
 export const SIZE_SUGGESTIONS = [
   'XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL',
   '0', '1', '3', '5', '7', '9', '11', '13', '15',
