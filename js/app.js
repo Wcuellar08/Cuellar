@@ -59,7 +59,7 @@ const TABS = [
   ['inventario', 'Inventario', 'box'],
   ['ventas', 'Ventas', 'receipt'],
   ['reportes', 'Reportes', 'chart', 'owner'],
-  ['ajustes', 'Ajustes', 'gear'],
+  ['ajustes', 'Configuración', 'gear', 'menu'], // se abre desde el menú del nombre, no va en la barra de abajo
 ];
 const isOwner = () => store.isOwner();
 const visibleTabs = () => TABS.filter((t) => t[3] !== 'owner' || isOwner());
@@ -158,7 +158,7 @@ function renderApp() {
         </button></div>
     </header>
     <main id="view"></main>
-    <nav class="tabbar">${visibleTabs().map(([id, label, ic]) =>
+    <nav class="tabbar">${visibleTabs().filter((t) => t[3] !== 'menu').map(([id, label, ic]) =>
       `<button data-tab="${id}" class="${ui.tab === id ? 'active' : ''}">${icon(ic)}<span>${label}</span></button>`).join('')}
     </nav>`;
   $$('.tabbar button').forEach((b) => b.addEventListener('click', () => switchTab(b.dataset.tab)));
@@ -2172,13 +2172,14 @@ VIEWS.ajustes = {
         </div>
         ${isOwner() ? '' : '<p class="muted small">Para cambiar tu contraseña o tu nombre, pídeselo a la dueña.</p>'}
       </section>`;
+    const pageHead = '<div class="page-head"><h1>Configuración</h1></div>';
     if (!isOwner()) {
-      v.innerHTML = myCard + '<p class="muted small center">BOOHO · Registro de Ventas · v1.8</p>';
+      v.innerHTML = pageHead + myCard + '<p class="muted small center">BOOHO · Registro de Ventas · v1.9</p>';
       $('#a-logout').addEventListener('click', async () => { if (await confirmDialog('¿Cerrar sesión?')) store.logout(); });
       return;
     }
     if (!ui.draft) ui.draft = structuredClone(S().settings);
-    v.innerHTML = `
+    v.innerHTML = `${pageHead}
       <section class="card">
         <div class="card-head"><h3>Usuarios</h3><button class="btn small primary" id="a-newuser">${icon('plus')} Nuevo usuario</button></div>
         <p class="muted small"><b>Dueña</b>: ve y hace todo. <b>Ayudante</b>: vende, registra prendas, imprime etiquetas y hace devoluciones; no ve costos, ganancias, reportes ni ajustes.</p>
@@ -2231,7 +2232,7 @@ VIEWS.ajustes = {
       ${isDemo ? `<section class="card"><h3>Modo demo</h3>
         <p class="muted small">Los datos se guardan solo en este dispositivo. Cuando configures Firebase, la app usará la nube y estos datos de prueba no se pasan.</p>
         <button class="btn danger ghost" id="a-reset">Borrar todos los datos de prueba</button></section>` : ''}
-      <p class="muted small center">BOOHO · Registro de Ventas · v1.8</p>`;
+      <p class="muted small center">BOOHO · Registro de Ventas · v1.9</p>`;
     this.drawCats();
     this.drawList('#a-pay', 'paymentMethods', 'Nueva forma de pago');
     this.drawList('#a-chan', 'channels', 'Nuevo canal');

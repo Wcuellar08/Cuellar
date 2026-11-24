@@ -879,3 +879,8 @@ td.num { font-variant-numeric: tabular-nums; }
   font: inherit; font-size: 14px; font-weight: 500; cursor: pointer;
 }
 .seg.on { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
+
+/* ---------- encabezado de página (Configuración) ---------- */
+.page-head { margin: 6px 0 20px; }
+.page-head h1 { font-size: 2.4rem; font-weight: 500; margin: 0; }
+.page-head h1::after { content: ''; display: block; width: 44px; height: 2px; background: var(--rose); margin-top: 12px; border-radius: 2px; }
